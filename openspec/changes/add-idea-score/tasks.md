@@ -77,19 +77,19 @@ typecheck`, `npm run lint`, `npm run format:check`, `npm run build`. Кажда�
 
 ## 5. OI в прогоне, предпросмотре и сканере
 
-- [ ] 5.1 `IHistorySource.ReadOpenInterest` в gRPC-источнике, в `TimedHistorySource` и `RepeatingHistorySource`.
+- [x] 5.1 `IHistorySource.ReadOpenInterest` в gRPC-источнике, в `TimedHistorySource` и `RepeatingHistorySource`.
   Проверить интеграционным тестом на поддельной ленте OI по образцу `FakeFundingFeed`.
-- [ ] 5.2 Кэш истории: явный вид записи месяца и OI видом `3` (решение 6). Проверить тестами кэша, что прежние файлы
+- [x] 5.2 Кэш истории: явный вид записи месяца и OI видом `3` (решение 6). Проверить тестами кэша, что прежние файлы
   видов `1` и `2` читаются без изменений, а OI пишется и читается.
-- [ ] 5.3 `MarketHistory.OpenInterestThrough`, OI в `HistoryHash`; прогон читает OI только для графов с узлом.
+- [x] 5.3 `MarketHistory.OpenInterestThrough`, OI в `HistoryHash`; прогон читает OI только для графов с узлом.
   Проверить тестами сценарии spec `market-history` «Граф без узла OI» и «Граф с узлом OI».
-- [ ] 5.4 OI в `PreviewHistory` и кэше предпросмотра для сигнала и стратегии. Проверить интеграционным тестом
+- [x] 5.4 OI в `PreviewHistory` и кэше предпросмотра для сигнала и стратегии. Проверить интеграционным тестом
   предпросмотра сигнала с узлом «OI».
-- [ ] 5.5 `IRecentHistory.OpenInterestPoints` (решение 6): последняя точка интервала со своим временем, частями по
+- [x] 5.5 `IRecentHistory.OpenInterestPoints` (решение 6): последняя точка интервала со своим временем, частями по
   1000. Проверить тестами `RestRecentHistory` на 1200 интервалах и на интервале без точки.
-- [ ] 5.6 `MarketBook` хранит точки OI 25 часов, `LastOpenInterest(symbol, moment)` строго раньше. Проверить тестами
+- [x] 5.6 `MarketBook` хранит точки OI 25 часов, `LastOpenInterest(symbol, moment)` строго раньше. Проверить тестами
   сценарии «Точки OI в живых данных».
-- [ ] 5.7 Сканер: прогрев читает OI для таймфреймов с узлом, живая свеча берёт `LastOpenInterest`. Проверить тестом
+- [x] 5.7 Сканер: прогрев читает OI для таймфреймов с узлом, живая свеча берёт `LastOpenInterest`. Проверить тестом
   `ScannerRig` сценарий «Прогрев метки OI»: метка на первой живой свече равна метке прогона на тех же данных.
 
 ## 6. Объём покупок

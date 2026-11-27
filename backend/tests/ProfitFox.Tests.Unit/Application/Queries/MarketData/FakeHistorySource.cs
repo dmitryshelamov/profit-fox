@@ -70,6 +70,28 @@ internal sealed class FakeHistorySource : IHistorySource
         return Task.FromResult(new HistoryRead<HistoryPayment>(coverage, payments));
     }
 
+    /// <summary>
+    ///     The points of open interest every five minutes over the coverage, each worth 1 000 000 + its minutes since
+    ///     <see cref="CoveredFrom" /> (change add-idea-score).
+    /// </summary>
+    public Task<HistoryRead<OpenInterestPoint>> ReadOpenInterest(string instrumentId, DateTimeOffset from, DateTimeOffset to, CancellationToken cancellation)
+    {
+        Reads.Add(("open-interest", from, to));
+        IReadOnlyList<TimeRange> coverage = Covered(from, to);
+        List<OpenInterestPoint> points = [];
+        var step = TimeSpan.FromMinutes(5);
+        long offset = from.UtcTicks % step.Ticks;
+        for (DateTimeOffset time = offset == 0 ? from : from.AddTicks(step.Ticks - offset); time < to; time += step)
+        {
+            if (Coverage.Covers(coverage, time, time.AddTicks(1)))
+            {
+                points.Add(new OpenInterestPoint(time, 1_000_000m + (decimal)(time - CoveredFrom).TotalMinutes));
+            }
+        }
+
+        return Task.FromResult(new HistoryRead<OpenInterestPoint>(coverage, points));
+    }
+
     private static string Text(double price)
     {
         return price.ToString(CultureInfo.InvariantCulture);

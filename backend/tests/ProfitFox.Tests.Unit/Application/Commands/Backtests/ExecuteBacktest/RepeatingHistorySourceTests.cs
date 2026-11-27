@@ -76,6 +76,23 @@ public sealed class RepeatingHistorySourceTests
         Assert.That(source.Calls, Is.EqualTo(1));
     }
 
+    /// <summary>
+    ///     Change add-idea-score, task 5.1: a dropped read of open interest is repeated as one of funding.
+    /// </summary>
+    [Test]
+    public async Task A_dropped_read_of_open_interest_is_repeated()
+    {
+        var source = new ScriptedSource(new HistoryUnavailableException("dropped", new IOException(), dropped: true));
+        var time = new FakeTimeProvider(From);
+        Task<HistoryRead<OpenInterestPoint>> reading = Repeating(source, time).ReadOpenInterest("btc", From, From.AddDays(1), CancellationToken.None);
+
+        await Until(() => source.Calls == 1);
+        time.Advance(HistoryRepeats.DefaultPauses[0]);
+
+        Assert.That((await reading).Items.Single().Value, Is.EqualTo(52345.123m));
+        Assert.That(source.Calls, Is.EqualTo(2));
+    }
+
     [Test]
     public void A_cancelled_read_is_not_repeated()
     {
@@ -134,6 +151,14 @@ public sealed class RepeatingHistorySourceTests
         {
             int call = Calls++;
             return call < errors.Length ? Task.FromException<HistoryRead<HistoryPayment>>(errors[call]) : Task.FromResult(Read);
+        }
+
+        public Task<HistoryRead<OpenInterestPoint>> ReadOpenInterest(string instrumentId, DateTimeOffset from, DateTimeOffset to, CancellationToken cancellation)
+        {
+            int call = Calls++;
+            return call < errors.Length
+                ? Task.FromException<HistoryRead<OpenInterestPoint>>(errors[call])
+                : Task.FromResult(new HistoryRead<OpenInterestPoint>([new TimeRange(from, to)], [new OpenInterestPoint(from, 52345.123m)]));
         }
     }
 }

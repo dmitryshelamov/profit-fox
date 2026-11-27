@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.IO.Compression;
 using System.Text;
 
@@ -28,8 +29,6 @@ internal sealed class FileHistoryMonthStore : IHistoryMonthStore
 
     private const string Extension = ".gz";
     private const string Temporary = ".tmp";
-    private const byte CandlesKind = 1;
-    private const byte FundingKind = 2;
     private const byte HasTurnover = 1;
     private const byte HasBuyVolume = 2;
 
@@ -73,7 +72,7 @@ internal sealed class FileHistoryMonthStore : IHistoryMonthStore
     /// </summary>
     internal string PathOf(HistoryMonth month)
     {
-        return Path.Combine(_root, SafeName(month.InstrumentId), KindName(month.Interval), $"{month.Start:yyyy-MM}{Extension}");
+        return Path.Combine(_root, SafeName(month.InstrumentId), KindName(month), $"{month.Start:yyyy-MM}{Extension}");
     }
 
     public async Task<HistoryRead<HistoryCandle>?> ReadCandles(HistoryMonth month, CancellationToken cancellation)
@@ -84,6 +83,15 @@ internal sealed class FileHistoryMonthStore : IHistoryMonthStore
     public async Task<HistoryRead<HistoryPayment>?> ReadFunding(HistoryMonth month, CancellationToken cancellation)
     {
         return await Read(month, reader => new HistoryPayment(reader.ReadTime(), reader.ReadString()), cancellation);
+    }
+
+    // A point keeps its value as the text of its decimal, which gives the same decimal back (change add-idea-score).
+    public async Task<HistoryRead<OpenInterestPoint>?> ReadOpenInterest(HistoryMonth month, CancellationToken cancellation)
+    {
+        return await Read(
+            month,
+            reader => new OpenInterestPoint(reader.ReadTime(), decimal.Parse(reader.ReadString(), NumberStyles.Float, CultureInfo.InvariantCulture)),
+            cancellation);
     }
 
     public Task SaveCandles(HistoryMonth month, HistoryRead<HistoryCandle> read, CancellationToken cancellation)
@@ -115,6 +123,15 @@ internal sealed class FileHistoryMonthStore : IHistoryMonthStore
         {
             writer.Write(payment.Time.UtcTicks);
             writer.Write(payment.Rate);
+        }, cancellation);
+    }
+
+    public Task SaveOpenInterest(HistoryMonth month, HistoryRead<OpenInterestPoint> read, CancellationToken cancellation)
+    {
+        return Save(month, read, (writer, point) =>
+        {
+            writer.Write(point.Time.UtcTicks);
+            writer.Write(point.Value.ToString(CultureInfo.InvariantCulture));
         }, cancellation);
     }
 
@@ -389,9 +406,19 @@ internal sealed class FileHistoryMonthStore : IHistoryMonthStore
         }
     }
 
+    // The kind a file writes is the number of the kind of its month (change add-idea-score, design.md, decision 6): candles
+    // and funding keep 1 and 2, so the files written before read as they did; open interest is 3.
     private static byte KindOf(HistoryMonth month)
     {
-        return month.Interval is null ? FundingKind : CandlesKind;
+        return (byte)month.Kind;
+    }
+
+    /// <summary>
+    ///     The name of the folder of the kind of a month: that of its candles or funding, or <c>open-interest</c>.
+    /// </summary>
+    internal static string KindName(HistoryMonth month)
+    {
+        return month.Kind == HistoryKind.OpenInterest ? "open-interest" : KindName(month.Interval);
     }
 
     /// <summary>

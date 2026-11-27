@@ -96,6 +96,24 @@ public sealed class MarketHistory
         return read;
     }
 
+    /// <summary>
+    ///     The points of open interest at times in [<paramref name="from" />, <paramref name="through" />], read as
+    ///     <see cref="FundingThrough" /> reads the payments (change add-idea-score, design.md, decision 6), and added to the hash.
+    /// </summary>
+    public async Task<HistoryRead<OpenInterestPoint>> OpenInterestThrough(
+        string instrumentId,
+        DateTimeOffset from,
+        DateTimeOffset through,
+        CancellationToken cancellation)
+    {
+        CheckWindow(from, through);
+        DateTimeOffset to = through < _today ? through + TimeSpan.FromSeconds(1) : through;
+        HistoryRead<OpenInterestPoint> read = await _source.ReadOpenInterest(instrumentId, from, to, cancellation);
+        read = read with { Coverage = Coverage.Trim(read.Coverage, from, to) };
+        _hash.Add(instrumentId, read);
+        return read;
+    }
+
     private void CheckWindow(DateTimeOffset from, DateTimeOffset to)
     {
         if (to <= from)

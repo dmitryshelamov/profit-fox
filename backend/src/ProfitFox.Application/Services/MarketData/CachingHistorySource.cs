@@ -66,9 +66,35 @@ public sealed class CachingHistorySource(IHistorySource source, IHistoryMonthSto
             cancellation);
     }
 
-    private async Task<HistoryRead<T>> Read<T>(
+    public Task<HistoryRead<OpenInterestPoint>> ReadOpenInterest(string instrumentId, DateTimeOffset from, DateTimeOffset to, CancellationToken cancellation)
+    {
+        return Read(
+            start => HistoryMonth.OpenInterest(instrumentId, start),
+            from,
+            to,
+            point => point.Time,
+            (start, end) => source.ReadOpenInterest(instrumentId, start, end, cancellation),
+            month => store.ReadOpenInterest(month, cancellation),
+            (month, read) => store.SaveOpenInterest(month, read, cancellation),
+            cancellation);
+    }
+
+    private Task<HistoryRead<T>> Read<T>(
         string instrumentId,
         TimeSpan? interval,
+        DateTimeOffset from,
+        DateTimeOffset to,
+        Func<T, DateTimeOffset> timeOf,
+        Func<DateTimeOffset, DateTimeOffset, Task<HistoryRead<T>>> readService,
+        Func<HistoryMonth, Task<HistoryRead<T>?>> readStore,
+        Func<HistoryMonth, HistoryRead<T>, Task> save,
+        CancellationToken cancellation)
+    {
+        return Read(start => new HistoryMonth(instrumentId, interval, start), from, to, timeOf, readService, readStore, save, cancellation);
+    }
+
+    private async Task<HistoryRead<T>> Read<T>(
+        Func<DateTimeOffset, HistoryMonth> monthOf,
         DateTimeOffset from,
         DateTimeOffset to,
         Func<T, DateTimeOffset> timeOf,
@@ -87,7 +113,7 @@ public sealed class CachingHistorySource(IHistorySource source, IHistoryMonthSto
         List<Part<T>> parts = [];
         for (DateTimeOffset start = HistoryMonth.StartOf(from); start < to; start = start.AddMonths(1))
         {
-            var month = new HistoryMonth(instrumentId, interval, start);
+            HistoryMonth month = monthOf(start);
             DateTimeOffset low = from > month.Start ? from : month.Start;
             DateTimeOffset high = to < month.End ? to : month.End;
             bool closed = month.End <= today && !_notWhole.ContainsKey(month);
@@ -188,7 +214,12 @@ public sealed class CachingHistorySource(IHistorySource source, IHistoryMonthSto
 
     private static string Name(HistoryMonth month)
     {
-        string kind = month.Interval is { } interval ? $"candles {interval.TotalMinutes:F0}m" : "funding";
+        string kind = month.Kind switch
+        {
+            HistoryKind.Candles => $"candles {month.Interval?.TotalMinutes ?? 0:F0}m",
+            HistoryKind.OpenInterest => "open interest",
+            _ => "funding"
+        };
         return $"{kind} of {month.InstrumentId} for {month.Start:yyyy-MM}";
     }
 

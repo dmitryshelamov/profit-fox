@@ -1,6 +1,7 @@
 using ProfitFox.Application.Ports.MarketData.Feed;
 using ProfitFox.Domain.ValueObjects.Execution;
 using ProfitFox.Domain.ValueObjects.Market;
+using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Domain.ValueObjects.MarketData.Enums;
 
 namespace ProfitFox.Application.Services.Market;
@@ -68,6 +69,7 @@ public sealed class MarketBook(TimeProvider time, TimeSpan closeDelay)
                 break;
             case LivePoint { Kind: LivePointKind.OpenInterest } point:
                 PairOf(point.Symbol).OpenInterest = Newer(PairOf(point.Symbol).OpenInterest, point);
+                PairOf(point.Symbol).Note(new OpenInterestPoint(point.Time, point.Value));
                 break;
             case LivePoint { Kind: LivePointKind.FundingRate } point:
                 PairOf(point.Symbol).Rate = Newer(PairOf(point.Symbol).Rate, point);
@@ -165,6 +167,17 @@ public sealed class MarketBook(TimeProvider time, TimeSpan closeDelay)
     }
 
     /// <summary>
+    ///     The last point of open interest of a pair with a time before <paramref name="moment" />, as the node «OI» reads it
+    ///     at a close (change add-idea-score, spec market-live-feed «Точки OI в живых данных»): a point at the close belongs to
+    ///     the next candle, as in a backtest; a point told after a close with a time before it is seen by the next candle.
+    ///     The book keeps the points of the last <see cref="Kept" />.
+    /// </summary>
+    public OpenInterestPoint? LastOpenInterest(string symbol, DateTimeOffset moment)
+    {
+        return _pairs.TryGetValue(symbol, out Pair? pair) ? pair.InterestBefore(moment) : null;
+    }
+
+    /// <summary>
     ///     The close of the last minute with trades of a pair opened before <paramref name="time" />: the price a payment at
     ///     that time is counted at, as the minute path of a backtest prices it; null when the book has none.
     /// </summary>
@@ -248,6 +261,7 @@ public sealed class MarketBook(TimeProvider time, TimeSpan closeDelay)
         private static readonly int Size = (int)(Kept.Ticks / TimeSpan.TicksPerMinute);
         private readonly LiveMinute?[] _ring = new LiveMinute?[Size];
         private readonly List<FundingPayment> _payments = [];
+        private readonly List<OpenInterestPoint> _interest = [];
 
         public LiveMinute? Last { get; private set; }
 
@@ -285,6 +299,40 @@ public sealed class MarketBook(TimeProvider time, TimeSpan closeDelay)
 
             DateTimeOffset newest = _payments[^1].Time;
             _payments.RemoveAll(held => held.Time < newest - PaymentsKept);
+        }
+
+        // The points in the order of their time, one a time; those older than the kept time before the newest go.
+        public void Note(OpenInterestPoint point)
+        {
+            int index = _interest.FindLastIndex(held => held.Time <= point.Time);
+            if (index >= 0 && _interest[index].Time == point.Time)
+            {
+                _interest[index] = point;
+            }
+            else
+            {
+                _interest.Insert(index + 1, point);
+            }
+
+            DateTimeOffset newest = _interest[^1].Time;
+            int old = _interest.FindIndex(held => held.Time >= newest - Kept);
+            if (old > 0)
+            {
+                _interest.RemoveRange(0, old);
+            }
+        }
+
+        public OpenInterestPoint? InterestBefore(DateTimeOffset moment)
+        {
+            for (int index = _interest.Count - 1; index >= 0; index--)
+            {
+                if (_interest[index].Time < moment)
+                {
+                    return _interest[index];
+                }
+            }
+
+            return null;
         }
 
         public IEnumerable<LiveMinute> Between(DateTimeOffset from, DateTimeOffset to)

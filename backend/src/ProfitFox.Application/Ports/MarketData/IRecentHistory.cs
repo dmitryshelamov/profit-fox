@@ -32,4 +32,12 @@ public interface IRecentHistory
     /// <exception cref="Exceptions.HistoryUnavailableException">The service did not answer.</exception>
     /// <exception cref="Exceptions.ReadTimedOutException">An attempt did not end within the limit of <paramref name="steps" />.</exception>
     Task<RecentRead<OpenInterestPoint>> OpenInterest(string instrumentId, TimeSpan interval, DateTimeOffset before, int limit, CancellationToken cancellation, IReadSteps? steps = null);
+
+    /// <summary>
+    ///     The last point of open interest of each of the <paramref name="count" /> intervals of <paramref name="interval" />
+    ///     before <paramref name="before" />, with its own time, oldest first; an interval without a point has none (change
+    ///     add-idea-score, design.md, decision 6). More than 1000 intervals are read in several windows, as the candles.
+    /// </summary>
+    /// <exception cref="Exceptions.HistoryUnavailableException">The service did not answer.</exception>
+    Task<RecentRead<OpenInterestPoint>> OpenInterestPoints(string instrumentId, TimeSpan interval, DateTimeOffset before, int count, CancellationToken cancellation);
 }

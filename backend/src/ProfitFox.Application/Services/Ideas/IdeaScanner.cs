@@ -377,7 +377,8 @@ public sealed class IdeaScanner
             wanted[$"s:{spec.Id}:{spec.Timeframe.Ticks}"] = (spec.Key, () => new Run(spec.Key, spec.Timeframe, StrategyGraph.NamedPairs(spec.Strategy.Graph))
             {
                 Strategy = spec,
-                Executor = new StrategyExecutor(spec.Strategy)
+                Executor = new StrategyExecutor(spec.Strategy),
+                OpenInterest = GraphNeeds.OpenInterest(spec.Strategy.Graph)
             });
         }
 
@@ -386,7 +387,8 @@ public sealed class IdeaScanner
             wanted[$"l:{spec.SignalId}"] = (spec.Key, () => new Run(spec.Key, spec.Timeframe, StrategyGraph.NamedPairs(spec.Signal.Graph))
             {
                 Label = spec,
-                Signals = new SignalExecutor(spec.Signal)
+                Signals = new SignalExecutor(spec.Signal),
+                OpenInterest = GraphNeeds.OpenInterest(spec.Signal.Graph)
             });
         }
 
@@ -469,6 +471,11 @@ public sealed class IdeaScanner
 
             DateTimeOffset from = candles.Items.Count > 0 ? candles.Items[0].OpenTime - TimeSpan.FromDays(1) : now - TimeSpan.FromDays(2);
             RecentRead<HistoryPayment> funding = await _history.Funding(instrument, from, now, cancellationToken);
+            // The points of open interest only for a timeframe with a graph with the node «OI», one read for the pair and the
+            // timeframe: the last point of each interval of the candles (change add-idea-score, design.md, decision 6).
+            RecentRead<OpenInterestPoint>? interest = runs.Any(run => run.OpenInterest)
+                ? await _history.OpenInterestPoints(instrument, timeframe, now, _settings.WarmupCandles, cancellationToken)
+                : null;
             var named = new Dictionary<string, IReadOnlyList<HistoryCandle>>(StringComparer.Ordinal);
             foreach (string pair in runs.SelectMany(run => run.Named).Distinct(StringComparer.Ordinal))
             {
@@ -487,7 +494,10 @@ public sealed class IdeaScanner
                     own[pair] = named[pair];
                 }
 
-                _warmed.Enqueue(new Warmup(run, symbol, funding.Loading, candles.Items, funding.Items, own));
+                _warmed.Enqueue(new Warmup(run, symbol, funding.Loading || (run.OpenInterest && interest?.Loading == true), candles.Items, funding.Items, own)
+                {
+                    OpenInterest = run.OpenInterest ? interest?.Items : null
+                });
             }
         }
         catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
@@ -569,13 +579,14 @@ public sealed class IdeaScanner
             warmup.Run.Pairs[warmup.Symbol] = state;
             try
             {
-                foreach ((ClosedCandle candle, CandleFacts funding, IReadOnlyDictionary<string, ClosedCandle>? pairs) in PairCandles.WithPairs(
+                foreach ((ClosedCandle candle, CandleFacts facts, IReadOnlyDictionary<string, ClosedCandle>? pairs) in PairCandles.WithPairs(
                              warmup.Run.Timeframe,
                              warmup.Candles,
                              warmup.Funding,
-                             warmup.Named))
+                             warmup.Named,
+                             warmup.OpenInterest))
                 {
-                    Step(warmup.Run, warmup.Symbol, candle, funding, pairs);
+                    Step(warmup.Run, warmup.Symbol, candle, facts, pairs);
                     state.WarmedUntil = candle.CloseTime;
                 }
 
@@ -685,7 +696,7 @@ public sealed class IdeaScanner
                 }
             }
 
-            Step(run, symbol, candle, Book.LastPayment(symbol, close), pairs ?? (run.Named.Count > 0 ? new Dictionary<string, ClosedCandle>() : null));
+            Step(run, symbol, candle, Facts(run, symbol, close), pairs ?? (run.Named.Count > 0 ? new Dictionary<string, ClosedCandle>() : null));
             state.WarmedUntil = close;
         }
     }
@@ -719,15 +730,22 @@ public sealed class IdeaScanner
         }
     }
 
+    // What the graph of a live candle knows at its close besides the candle: the last payment and, for a graph with the node
+    // «OI», the last point of open interest before the close (change add-idea-score, design.md, decision 6).
+    private CandleFacts Facts(Run run, string symbol, DateTimeOffset close)
+    {
+        return new CandleFacts(Book.LastPayment(symbol, close), run.OpenInterest ? Book.LastOpenInterest(symbol, close) : null);
+    }
+
     // A strategy is stepped for its order; a label keeps the value of its signal at the close.
-    private static StrategyStep? Step(Run run, string symbol, ClosedCandle candle, CandleFacts funding, IReadOnlyDictionary<string, ClosedCandle>? pairs)
+    private static StrategyStep? Step(Run run, string symbol, ClosedCandle candle, CandleFacts facts, IReadOnlyDictionary<string, ClosedCandle>? pairs)
     {
         if (run.Executor is { } executor)
         {
-            return executor.Step(symbol, candle, funding, pairs);
+            return executor.Step(symbol, candle, facts, pairs);
         }
 
-        run.Values[symbol] = (candle.CloseTime, run.Signals!.Value(symbol, candle, funding, pairs));
+        run.Values[symbol] = (candle.CloseTime, run.Signals!.Value(symbol, candle, facts, pairs));
         return null;
     }
 
@@ -949,7 +967,7 @@ public sealed class IdeaScanner
             StrategyStep? step;
             try
             {
-                step = Step(run, symbol, candle, Book.LastPayment(symbol, close), pairs ?? (run.Named.Count > 0 ? new Dictionary<string, ClosedCandle>() : null));
+                step = Step(run, symbol, candle, Facts(run, symbol, close), pairs ?? (run.Named.Count > 0 ? new Dictionary<string, ClosedCandle>() : null));
             }
             catch (Exception exception) when (exception is not OperationCanceledException)
             {
@@ -1212,6 +1230,11 @@ public sealed class IdeaScanner
 
         public SignalExecutor? Signals { get; init; }
 
+        /// <summary>
+        ///     Whether the graph has the node «OI» (change add-idea-score): its warm-up reads the points of open interest.
+        /// </summary>
+        public bool OpenInterest { get; init; }
+
         public Dictionary<string, PairState> Pairs { get; } = new Dictionary<string, PairState>(StringComparer.Ordinal);
 
         public Dictionary<string, (DateTimeOffset Close, bool? Value)> Values { get; } = new Dictionary<string, (DateTimeOffset Close, bool? Value)>(StringComparer.Ordinal);
@@ -1237,6 +1260,11 @@ public sealed class IdeaScanner
         IReadOnlyDictionary<string, IReadOnlyList<HistoryCandle>>? Named)
     {
         public string? Failure { get; init; }
+
+        /// <summary>
+        ///     The last point of open interest of each interval of the candles, for a graph with the node «OI».
+        /// </summary>
+        public IReadOnlyList<OpenInterestPoint>? OpenInterest { get; init; }
 
         // The failure without what changes from one read to the next: the key of the journal (task 19.4).
         public string? Reason { get; init; }

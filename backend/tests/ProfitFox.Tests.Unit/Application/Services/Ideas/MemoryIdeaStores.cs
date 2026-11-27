@@ -214,6 +214,11 @@ public sealed class FakeRecentHistory : IRecentHistory
     public HashSet<string> Loading { get; } = [];
 
     /// <summary>
+    ///     The points of open interest a test gives each pair by its id (change add-idea-score).
+    /// </summary>
+    public Dictionary<string, List<OpenInterestPoint>> Points { get; } = [];
+
+    /// <summary>
     ///     The ids of the pairs whose candles the service refuses, with the message of the refusal (task 18.3).
     /// </summary>
     public Dictionary<string, string> Failing { get; } = [];
@@ -273,6 +278,32 @@ public sealed class FakeRecentHistory : IRecentHistory
     public Task<RecentRead<OpenInterestPoint>> OpenInterest(string instrumentId, TimeSpan interval, DateTimeOffset before, int limit, CancellationToken cancellation, IReadSteps? steps = null)
     {
         return Task.FromResult(new RecentRead<OpenInterestPoint>(false, []));
+    }
+
+    // The last point of each interval of the window with its own time, as the service gives them (change add-idea-score).
+    public Task<RecentRead<OpenInterestPoint>> OpenInterestPoints(string instrumentId, TimeSpan interval, DateTimeOffset before, int count, CancellationToken cancellation)
+    {
+        lock (Asked)
+        {
+            Asked.Add($"open-interest {instrumentId}");
+        }
+
+        if (Loading.Contains(instrumentId))
+        {
+            return Task.FromResult(RecentRead<OpenInterestPoint>.StillLoading);
+        }
+
+        long step = interval.Ticks;
+        var to = new DateTimeOffset(before.UtcTicks / step * step, TimeSpan.Zero);
+        DateTimeOffset from = to - (interval * count);
+        IEnumerable<OpenInterestPoint> points = Points.GetValueOrDefault(instrumentId) ?? [];
+        return Task.FromResult(new RecentRead<OpenInterestPoint>(false, [
+            .. points
+                .Where(point => point.Time >= from && point.Time < to)
+                .GroupBy(point => point.Time.UtcTicks / step)
+                .Select(group => group.MaxBy(point => point.Time)!)
+                .OrderBy(point => point.Time)
+        ]));
     }
 }
 

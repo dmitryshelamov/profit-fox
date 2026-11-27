@@ -40,4 +40,17 @@ internal sealed class TimedHistorySource(IHistorySource source) : IHistorySource
             Interlocked.Add(ref _ticks, Stopwatch.GetElapsedTime(start).Ticks);
         }
     }
+
+    public async Task<HistoryRead<OpenInterestPoint>> ReadOpenInterest(string instrumentId, DateTimeOffset from, DateTimeOffset to, CancellationToken cancellation)
+    {
+        long start = Stopwatch.GetTimestamp();
+        try
+        {
+            return await source.ReadOpenInterest(instrumentId, from, to, cancellation);
+        }
+        finally
+        {
+            Interlocked.Add(ref _ticks, Stopwatch.GetElapsedTime(start).Ticks);
+        }
+    }
 }

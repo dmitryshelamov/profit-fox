@@ -69,6 +69,62 @@ public sealed class PreviewTests
             Is.EqualTo(rows.Where(row => row.Instrument == "BTCUSDT").Select(row => row.Moment).Order()));
     }
 
+    /// <summary>
+    ///     Change add-idea-score, task 5.4: the preview of a signal with the node «OI» reads the points of open interest of the
+    ///     pair once and gives them to the node. The fake service holds 24 000 coins: «фандинг ≥ 0.05 % и OI ≥ 20 000» fires
+    ///     as H0001, once a day; with 30 000 it never does. A signal without the node reads none.
+    /// </summary>
+    [Test]
+    public async Task The_preview_of_a_signal_with_the_node_of_open_interest_reads_its_points()
+    {
+        await using MarketDataServer market = await MarketDataServer.Start();
+        await using var api = new BenchTestApplication(market, time: FixedTime.Exploration);
+
+        PreviewResponse plain = await Ok(await Preview(api, "BTCUSDT", "4h", Signal()));
+        int before = market.Data.InterestRequests.Count;
+        PreviewResponse above = await Ok(await Preview(api, "BTCUSDT", "4h", WithOpenInterest(20000)));
+        PreviewResponse below = await Ok(await Preview(api, "BTCUSDT", "4h", WithOpenInterest(30000)));
+
+        Assert.That(before, Is.Zero, "a signal without the node reads no open interest");
+        Assert.That(market.Data.InterestRequests, Has.Count.EqualTo(1), "read once, then from the memory of the preview");
+        Assert.That(above.Events.Select(item => item.Moment), Is.EqualTo(plain.Events.Select(item => item.Moment)));
+        Assert.That(above.Events, Has.Count.EqualTo(28));
+        Assert.That(below.Events, Is.Empty);
+    }
+
+    // H0001 with «OI ≥ least» joined to its condition by «и».
+    private static JsonObject WithOpenInterest(decimal least)
+    {
+        return JsonNode.Parse(
+            $$"""
+              {
+                "formatVersion": 1,
+                "parameters": [{ "name": "threshold", "type": "number", "value": 0.0005 }, { "name": "least", "type": "number", "value": {{least}} }],
+                "outputs": [{ "name": "entry", "type": "event" }],
+                "nodes": [
+                  { "id": "p", "kind": "parameters" },
+                  { "id": "rate", "kind": "funding-rate" },
+                  { "id": "oi", "kind": "open-interest" },
+                  { "id": "high", "kind": "compare", "settings": { "operation": "ge" } },
+                  { "id": "big", "kind": "compare", "settings": { "operation": "ge" } },
+                  { "id": "both", "kind": "and" },
+                  { "id": "first", "kind": "first-time" },
+                  { "id": "out", "kind": "outputs" }
+                ],
+                "wires": [
+                  { "from": "rate.value", "to": "high.a" },
+                  { "from": "p.threshold", "to": "high.b" },
+                  { "from": "oi.value", "to": "big.a" },
+                  { "from": "p.least", "to": "big.b" },
+                  { "from": "high.result", "to": "both.a" },
+                  { "from": "big.result", "to": "both.b" },
+                  { "from": "both.result", "to": "first.value" },
+                  { "from": "first.event", "to": "out.entry" }
+                ]
+              }
+              """)!.AsObject();
+    }
+
     [Test]
     public async Task A_signal_that_never_fires_gives_candles_and_no_events()
     {

@@ -40,6 +40,16 @@ internal sealed class MemoryHistoryMonthStore : IHistoryMonthStore
         return Read<HistoryPayment>(month);
     }
 
+    public Task<HistoryRead<OpenInterestPoint>?> ReadOpenInterest(HistoryMonth month, CancellationToken cancellation)
+    {
+        return Read<OpenInterestPoint>(month);
+    }
+
+    public Task SaveOpenInterest(HistoryMonth month, HistoryRead<OpenInterestPoint> read, CancellationToken cancellation)
+    {
+        return Save(month, read);
+    }
+
     public Task SaveCandles(HistoryMonth month, HistoryRead<HistoryCandle> read, CancellationToken cancellation)
     {
         return Save(month, read);

@@ -70,6 +70,37 @@ public sealed class GrpcHistorySourceTests
         Assert.That(read.Items[0].ToFundingPayment(), Is.EqualTo(new FundingPayment(Start, 0.0001m)));
     }
 
+    /// <summary>
+    ///     Change add-idea-score, task 5.1: the points of open interest come from <c>OpenInterestFeed.History</c> with their
+    ///     coverage, one request of the instrument and the window, the value read as a decimal.
+    /// </summary>
+    [Test]
+    public async Task Points_of_open_interest_come_from_the_stream_with_their_coverage()
+    {
+        await using MarketDataServer server = await MarketDataServer.Start();
+        var source = new GrpcHistorySource(server.Channel);
+
+        HistoryRead<OpenInterestPoint> read = await source.ReadOpenInterest("btc", Start.AddDays(-1), Start.AddHours(1), CancellationToken.None);
+
+        Assert.That(read.Coverage, Is.EqualTo(new[] { new TimeRange(Start, Start.AddHours(1)) }));
+        Assert.That(read.Items.Select(point => point.Time), Is.EqualTo(Enumerable.Range(0, 12).Select(step => Start.AddMinutes(5 * step))));
+        Assert.That(read.Items[0], Is.EqualTo(new OpenInterestPoint(Start, 24000m)));
+        OpenInterestHistoryRequest request = server.Data.InterestRequests.Single();
+        Assert.That((request.InstrumentIds.Single(), request.From.ToDateTimeOffset(), request.To.ToDateTimeOffset()), Is.EqualTo(("btc", Start.AddDays(-1), Start.AddHours(1))));
+    }
+
+    [Test]
+    public async Task A_stopping_service_is_a_dropped_read_of_open_interest()
+    {
+        await using MarketDataServer server = await MarketDataServer.Start();
+        server.Data.Failure = StatusCode.Unavailable;
+        var source = new GrpcHistorySource(server.Channel);
+
+        Assert.That(
+            () => source.ReadOpenInterest("btc", Start, Start.AddDays(1), CancellationToken.None),
+            Throws.InstanceOf<HistoryUnavailableException>().With.Property(nameof(HistoryUnavailableException.Dropped)).True);
+    }
+
     [Test]
     public async Task A_stopping_service_is_history_unavailable()
     {

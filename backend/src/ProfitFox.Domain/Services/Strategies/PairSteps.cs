@@ -41,11 +41,12 @@ public sealed class PairSteps
         string symbol,
         IEnumerable<HistoryCandle> candles,
         IEnumerable<HistoryPayment> funding,
-        IReadOnlyDictionary<string, IReadOnlyList<HistoryCandle>>? named = null)
+        IReadOnlyDictionary<string, IReadOnlyList<HistoryCandle>>? named = null,
+        IEnumerable<OpenInterestPoint>? openInterest = null)
     {
         var executor = new StrategyExecutor(strategy);
         List<StrategyStep> steps = [];
-        foreach ((ClosedCandle closed, CandleFacts facts, IReadOnlyDictionary<string, ClosedCandle>? pairs) in PairCandles.WithPairs(timeframe, candles, funding, named))
+        foreach ((ClosedCandle closed, CandleFacts facts, IReadOnlyDictionary<string, ClosedCandle>? pairs) in PairCandles.WithPairs(timeframe, candles, funding, named, openInterest))
         {
             steps.Add(executor.Step(symbol, closed, facts, pairs));
         }

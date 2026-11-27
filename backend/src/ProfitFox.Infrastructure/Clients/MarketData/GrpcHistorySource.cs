@@ -19,6 +19,7 @@ public sealed class GrpcHistorySource(GrpcChannel channel) : IHistorySource
 {
     private readonly CandleFeed.CandleFeedClient _candles = new CandleFeed.CandleFeedClient(channel);
     private readonly FundingPaymentFeed.FundingPaymentFeedClient _funding = new FundingPaymentFeed.FundingPaymentFeedClient(channel);
+    private readonly OpenInterestFeed.OpenInterestFeedClient _openInterest = new OpenInterestFeed.OpenInterestFeedClient(channel);
 
     public async Task<HistoryRead<HistoryCandle>> ReadCandles(
         string instrumentId,
@@ -91,6 +92,41 @@ public sealed class GrpcHistorySource(GrpcChannel channel) : IHistorySource
         });
 
         return new HistoryRead<HistoryPayment>(coverage, payments);
+    }
+
+    /// <summary>
+    ///     The points of open interest of <c>OpenInterestFeed.History</c> (change add-idea-score, spec market-history «Источник
+    ///     истории»): the value as the service stores it, read as a decimal.
+    /// </summary>
+    public async Task<HistoryRead<OpenInterestPoint>> ReadOpenInterest(string instrumentId, DateTimeOffset from, DateTimeOffset to, CancellationToken cancellation)
+    {
+        var request = new OpenInterestHistoryRequest
+        {
+            InstrumentIds = { instrumentId },
+            From = Timestamp.FromDateTimeOffset(from),
+            To = Timestamp.FromDateTimeOffset(to)
+        };
+        List<TimeRange> coverage = [];
+        List<OpenInterestPoint> points = [];
+        await Read(async () =>
+        {
+            using AsyncServerStreamingCall<OpenInterestHistoryItem> call = _openInterest.History(request, cancellationToken: cancellation);
+            await foreach (OpenInterestHistoryItem item in call.ResponseStream.ReadAllAsync(cancellation))
+            {
+                if (item.ItemCase == OpenInterestHistoryItem.ItemOneofCase.Coverage)
+                {
+                    coverage.AddRange(Ranges(item.Coverage));
+                }
+                else if (item.ItemCase == OpenInterestHistoryItem.ItemOneofCase.Point)
+                {
+                    points.Add(new OpenInterestPoint(
+                        item.Point.Time.ToDateTimeOffset(),
+                        decimal.Parse(item.Point.OpenInterest, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture)));
+                }
+            }
+        });
+
+        return new HistoryRead<OpenInterestPoint>(coverage, points);
     }
 
     private static IEnumerable<TimeRange> Ranges(InstrumentCoverage coverage)
