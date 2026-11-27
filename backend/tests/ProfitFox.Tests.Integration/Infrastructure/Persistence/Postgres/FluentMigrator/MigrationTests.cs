@@ -26,7 +26,11 @@ public sealed class MigrationTests
 
     private static readonly string[] IdeaTables = ["ideas", "market_pairs", "saved_filters", "scanner_lease", "signal_labels", "strategy_ideas"];
 
-    private static readonly string[] Tables = [.. BacktestTables.Concat(IdeaTables).Order(StringComparer.Ordinal)];
+    private static readonly string[] IdeaStageTables = [.. BacktestTables.Concat(IdeaTables).Order(StringComparer.Ordinal)];
+
+    private static readonly string[] ScoreTables = ["label_weights"];
+
+    private static readonly string[] Tables = [.. BacktestTables.Concat(IdeaTables).Concat(ScoreTables).Order(StringComparer.Ordinal)];
 
     [SetUp]
     public async Task Empty()
@@ -56,7 +60,7 @@ public sealed class MigrationTests
 
         await using var connection = new NpgsqlConnection(connectionString);
         long[] versions = [.. await connection.QueryAsync<long>("SELECT \"Version\" FROM \"VersionInfo\" ORDER BY \"Version\"")];
-        Assert.That(versions, Is.EqualTo(new[] { 202611200001L, 202611210001L, 202611220001L, 202611220002L, 202611230001L, 202611230002L, 202611230003L, 202611230004L, 202611250001L, 202611250002L }));
+        Assert.That(versions, Is.EqualTo(new[] { 202611200001L, 202611210001L, 202611220001L, 202611220002L, 202611230001L, 202611230002L, 202611230003L, 202611230004L, 202611250001L, 202611250002L, 202611270001L }));
         Assert.That(await TablesOf(connectionString), Is.SupersetOf(new[] { "strategies", "strategy_versions", "strategy_signals" }));
     }
 
@@ -172,7 +176,7 @@ public sealed class MigrationTests
 
         Assert.That(await connection.QueryAsync<string>(columns), Is.EqualTo(new[] { "name", "worker", "until", "live_since", "warmed", "pairs" }));
         Assert.That(await connection.ExecuteScalarAsync<int>("SELECT count(*) FROM pg_indexes WHERE indexname = 'ideas_state_exit_time_ix'"), Is.Zero, "task 18.16: Down takes the index away");
-        Assert.That(await TablesOf(connectionString), Is.EqualTo(Tables));
+        Assert.That(await TablesOf(connectionString), Is.EqualTo(IdeaStageTables));
     }
 
     /// <summary>
@@ -227,6 +231,37 @@ public sealed class MigrationTests
 
         Assert.That(await connection.QueryAsync<string>(columns), Does.Not.Contain("kind"));
         Assert.That(await connection.ExecuteScalarAsync<long>("SELECT count(*) FROM market_pairs"), Is.EqualTo(2));
+    }
+
+    /// <summary>
+    ///     Change add-idea-score, task 2.1 (design.md, decision 1): the weights of the labels are a table by the text of a label
+    ///     with two weights of −3 to +3; a weight of 4 is refused by the database, and Down takes only the table away.
+    /// </summary>
+    [Test]
+    public async Task The_weights_of_the_labels_come_refuse_a_weight_out_of_range_and_go_back()
+    {
+        string connectionString = await BenchDatabase.NewDatabase();
+        await using var connection = new NpgsqlConnection(connectionString);
+        var registrations = new ServiceCollection();
+        PostgresRegistrar.Configure(BenchDatabase.Settings(connectionString), registrations);
+        await using ServiceProvider services = registrations.BuildServiceProvider();
+        using IServiceScope scope = services.CreateScope();
+        IMigrationRunner runner = scope.ServiceProvider.GetRequiredService<IMigrationRunner>();
+        runner.MigrateUp(202611270001);
+
+        await connection.ExecuteAsync("INSERT INTO label_weights (text, long_weight, short_weight) VALUES ('↓ BTC 4h', -3, 3)");
+        Assert.That(await connection.QuerySingleAsync<(short, short)>("SELECT long_weight, short_weight FROM label_weights WHERE text = '↓ BTC 4h'"), Is.EqualTo(((short)-3, (short)3)));
+        PostgresException? tooHigh = Assert.ThrowsAsync<PostgresException>(() => connection.ExecuteAsync("INSERT INTO label_weights (text, long_weight, short_weight) VALUES ('фандинг ↑', 4, 0)"));
+        Assert.That(tooHigh!.SqlState, Is.EqualTo(PostgresErrorCodes.CheckViolation));
+        PostgresException? tooLow = Assert.ThrowsAsync<PostgresException>(() => connection.ExecuteAsync("UPDATE label_weights SET short_weight = -4 WHERE text = '↓ BTC 4h'"));
+        Assert.That(tooLow!.SqlState, Is.EqualTo(PostgresErrorCodes.CheckViolation));
+        PostgresException? twice = Assert.ThrowsAsync<PostgresException>(() => connection.ExecuteAsync("INSERT INTO label_weights (text, long_weight, short_weight) VALUES ('↓ BTC 4h', 0, 0)"));
+        Assert.That(twice!.SqlState, Is.EqualTo(PostgresErrorCodes.UniqueViolation));
+
+        runner.MigrateDown(202611250002);
+
+        Assert.That(await TablesOf(connectionString), Does.Not.Contain("label_weights"));
+        Assert.That(await TablesOf(connectionString), Does.Contain("ideas"));
     }
 
     private static async Task<string[]> ColumnsOf(NpgsqlConnection connection, string[] tables)

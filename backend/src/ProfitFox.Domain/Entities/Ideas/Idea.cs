@@ -46,6 +46,13 @@ public sealed class Idea
 
     public IReadOnlyList<string> Labels { get; set; } = [];
 
+    /// <summary>
+    ///     The score of the idea (change add-idea-score, spec idea-score «Балл идеи»): the sum of the weights of its labels by
+    ///     its side, by the weights when the idea was read. The store counts it for the lists; it is never written and changes
+    ///     nothing of the idea, its plan or its outcome; 0 where it was not counted.
+    /// </summary>
+    public int Score { get; init; }
+
     public IdeaState State { get; set; } = IdeaState.Open;
 
     /// <summary>

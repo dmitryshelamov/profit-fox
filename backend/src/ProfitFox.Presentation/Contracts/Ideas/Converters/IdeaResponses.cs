@@ -53,7 +53,8 @@ public static class IdeaResponses
             idea.Ambiguous,
             idea.Result,
             idea.ResultUsdt,
-            idea.Excluded);
+            idea.Excluded,
+            idea.Score);
     }
 
     public static IdeaPageResponse Of(IdeaListResult result)
@@ -64,6 +65,11 @@ public static class IdeaResponses
     public static IdeaSummaryPageResponse Of(IdeaSummaryResult result)
     {
         return new IdeaSummaryPageResponse([.. result.Page.Items.Select(Of)], result.Page.Total, result.Page.Page, result.Page.PageSize, result.FilterGone);
+    }
+
+    public static IdeaScoresResponse Of(IdeaScoresResult result)
+    {
+        return new IdeaScoresResponse([.. result.Rows.Select(row => new IdeaScoreResponse(row.Score, row.Ideas, row.Wins, row.Mean, row.Sum))], result.FilterGone);
     }
 
     public static IdeaStrategyCountsResponse Of(IdeaStrategiesResult result)

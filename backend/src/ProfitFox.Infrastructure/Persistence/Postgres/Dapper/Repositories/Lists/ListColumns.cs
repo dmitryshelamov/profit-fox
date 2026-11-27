@@ -21,6 +21,15 @@ internal static class ListColumns
     // An open idea counts by its result now, a closed one by its outcome.
     public const string Result = "(CASE WHEN i.state = 'open' THEN i.now_result ELSE i.result END)";
 
+    /// <summary>
+    ///     The score of the idea under <paramref name="alias" /> (change add-idea-score, design.md, decision 2): the sum of the
+    ///     weights of its labels by its side, by the weights now; 0 without labels or weights.
+    /// </summary>
+    public static string Score(string alias)
+    {
+        return $"(SELECT COALESCE(sum(CASE WHEN {alias}.side = 'long' THEN w.long_weight ELSE w.short_weight END), 0)::int FROM label_weights w WHERE w.text = ANY({alias}.labels))";
+    }
+
     public static readonly IReadOnlyDictionary<string, string> Market = new Dictionary<string, string>(StringComparer.Ordinal)
     {
         ["symbol"] = "m.symbol",
@@ -41,6 +50,7 @@ internal static class ListColumns
         ["timeframe"] = "(CASE i.timeframe WHEN '5m' THEN 1 WHEN '15m' THEN 2 WHEN '1h' THEN 3 WHEN '4h' THEN 4 ELSE 5 END)",
         ["side"] = "i.side",
         ["labels"] = "NULLIF(array_to_string(i.labels, ' '), '')",
+        [ListFields.Score] = Score("i"),
         ["moment"] = "i.moment",
         ["entry"] = "COALESCE(i.entry_price, i.candle_close)",
         ["stop"] = "i.stop_price",
@@ -77,6 +87,7 @@ internal static class ListColumns
         ["strategy"] = StrategyName,
         ["timeframe"] = "i.timeframe",
         ["side"] = "i.side",
+        [ListFields.Score] = Score("i"),
         ["result"] = Result,
         ["minutesLeft"] = "(EXTRACT(EPOCH FROM (i.until - now())) / 60)",
         ["hasStop"] = "(i.stop IS NOT NULL)"

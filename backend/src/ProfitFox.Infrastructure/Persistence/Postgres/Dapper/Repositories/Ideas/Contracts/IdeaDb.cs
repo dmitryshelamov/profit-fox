@@ -7,6 +7,11 @@ internal sealed class IdeaDb
 {
     public Guid Id { get; init; }
 
+    /// <summary>
+    ///     The score by the weights now; read by the lists only.
+    /// </summary>
+    public int Score { get; init; }
+
     public Guid StrategyId { get; init; }
 
     public string StrategyName { get; init; } = "";

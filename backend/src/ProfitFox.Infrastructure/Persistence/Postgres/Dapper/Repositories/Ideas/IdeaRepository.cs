@@ -81,7 +81,7 @@ internal sealed class IdeaRepository(NpgsqlDataSource database) : IIdeaRepositor
             }
         }
 
-        string sql = $"SELECT {IdeaRepositoryQueries.Columns} {Joined} WHERE {where} {orderBy} LIMIT @Limit OFFSET @Offset";
+        string sql = $"SELECT {IdeaRepositoryQueries.Columns}, {ListColumns.Score("i")} AS \"Score\" {Joined} WHERE {where} {orderBy} LIMIT @Limit OFFSET @Offset";
         IdeaDb[] rows = [.. await connection.QueryAsync<IdeaDb>(new CommandDefinition(sql, parameters, cancellationToken: cancellationToken))];
         return new ListPage<Idea>([.. rows.Select(IdeaDbConverter.ToDomain)], total, order.Page, order.PageSize);
     }
@@ -120,6 +120,22 @@ internal sealed class IdeaRepository(NpgsqlDataSource database) : IIdeaRepositor
         return [.. await connection.QueryAsync<IdeaStrategyCount>(new CommandDefinition(sql, parameters, cancellationToken: cancellationToken))];
     }
 
+    public async Task<IReadOnlyList<IdeaScoreRow>> ScoresAsync(IdeaListQuery query, CancellationToken cancellationToken)
+    {
+        var parameters = new DynamicParameters();
+        string where = Where(query with { Kind = IdeaListKind.Closed }, parameters);
+        string sql =
+            $"""
+             SELECT g.score AS "Score", count(*)::int AS "Ideas", avg(CASE WHEN g.result > 0 THEN 1.0 ELSE 0.0 END)::float8 AS "Wins",
+                    avg(g.result)::float8 AS "Mean", COALESCE(sum(g.result_usdt), 0)::float8 AS "Sum"
+             FROM (SELECT {ListColumns.Score("i")} AS score, i.result, i.result_usdt {Joined} WHERE {where}) g
+             GROUP BY g.score
+             ORDER BY g.score DESC
+             """;
+        await using NpgsqlConnection connection = await database.OpenConnectionAsync(cancellationToken);
+        return [.. await connection.QueryAsync<IdeaScoreRow>(new CommandDefinition(sql, parameters, cancellationToken: cancellationToken))];
+    }
+
     public async Task<(int Open, int Closed)> CountsAsync(CancellationToken cancellationToken)
     {
         await using NpgsqlConnection connection = await database.OpenConnectionAsync(cancellationToken);
@@ -152,6 +168,12 @@ internal sealed class IdeaRepository(NpgsqlDataSource database) : IIdeaRepositor
         Add(parts, parameters, "State", query.State, "i.state = @State");
         // The kind of the pair in the snapshot: an idea of a pair out of it has no row there and is of no kind (decision 3).
         Add(parts, parameters, "PairKind", query.PairKind is { } kind ? InstrumentKinds.Name(kind) : null, "m.kind = @PairKind");
+        if (query.MinScore is { } minScore)
+        {
+            parameters.Add("MinScore", minScore);
+            parts.Add($"{ListColumns.Score("i")} >= @MinScore");
+        }
+
         if (query.OnlyPositive)
         {
             parts.Add("i.now_result > 0");

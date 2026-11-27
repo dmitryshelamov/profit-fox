@@ -11,7 +11,8 @@ namespace ProfitFox.Domain.ValueObjects.Lists;
 ///     For the chart of a pair (task 18.22): the window of time the ideas touch, from <see cref="From" /> to
 ///     <see cref="To" />, and the idea whose page is wanted, <see cref="Around" />, instead of the page of the order.
 ///     <see cref="PairKind" />: the kind of the pair of the idea in the snapshot of the market, every idea when null; an idea
-///     of a pair out of the snapshot is of no kind (change add-instrument-kind-filter, decision 3).
+///     of a pair out of the snapshot is of no kind (change add-instrument-kind-filter, decision 3). <see cref="MinScore" />:
+///     only ideas with a score of at least it (change add-idea-score, spec idea-score «Балл в списках идей»).
 /// </summary>
 public sealed record IdeaListQuery(
     IdeaListKind Kind,
@@ -31,4 +32,5 @@ public sealed record IdeaListQuery(
     DateTimeOffset? From = null,
     DateTimeOffset? To = null,
     Guid? Around = null,
-    InstrumentKind? PairKind = null);
+    InstrumentKind? PairKind = null,
+    int? MinScore = null);

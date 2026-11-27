@@ -85,6 +85,11 @@ public sealed class MemoryIdeaRepository : IIdeaRepository
         throw new NotSupportedException("The summary is that of the database.");
     }
 
+    public Task<IReadOnlyList<IdeaScoreRow>> ScoresAsync(IdeaListQuery query, CancellationToken cancellationToken)
+    {
+        throw new NotSupportedException("The outcomes by score are those of the database.");
+    }
+
     public Task<(int Open, int Closed)> CountsAsync(CancellationToken cancellationToken)
     {
         return Task.FromResult((Ideas.Count(idea => idea.State == IdeaState.Open), Ideas.Count(idea => idea.State == IdeaState.Closed)));

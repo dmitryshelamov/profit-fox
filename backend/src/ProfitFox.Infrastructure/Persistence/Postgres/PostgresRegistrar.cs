@@ -10,6 +10,7 @@ using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Backtest
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Filters;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Ideas;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Market;
+using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Scoring;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Signals;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Strategies;
 
@@ -37,6 +38,7 @@ internal static class PostgresRegistrar
         services.AddSingleton<IIdeaRepository, IdeaRepository>();
         services.AddSingleton<IMarketPairRepository, MarketPairRepository>();
         services.AddSingleton<ISavedFilterRepository, SavedFilterRepository>();
+        services.AddSingleton<ILabelWeightRepository, LabelWeightRepository>();
         services
             .AddFluentMigratorCore()
             .ConfigureRunner(runner => runner

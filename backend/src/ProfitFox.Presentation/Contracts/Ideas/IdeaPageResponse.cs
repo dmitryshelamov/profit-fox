@@ -12,6 +12,17 @@ public sealed record IdeaPageResponse(IReadOnlyList<IdeaResponse> Items, int Tot
 /// </summary>
 public sealed record IdeaSummaryResponse(Guid StrategyId, string Strategy, int Version, string Timeframe, int Ideas, double Wins, double Mean, double Sum);
 
+/// <summary>
+///     A row of the outcomes by score (change add-idea-score, spec idea-score «Итоги по баллу»): the score, the number of
+///     closed ideas, the share of those in the plus and the mean outcome after costs as fractions, and the sum in USDT.
+/// </summary>
+public sealed record IdeaScoreResponse(int Score, int Ideas, double Wins, double Mean, double Sum);
+
+/// <summary>
+///     The outcomes by score, from the highest score, and whether the saved filter asked for is gone.
+/// </summary>
+public sealed record IdeaScoresResponse(IReadOnlyList<IdeaScoreResponse> Rows, bool FilterGone);
+
 public sealed record IdeaSummaryPageResponse(IReadOnlyList<IdeaSummaryResponse> Items, int Total, int Page, int PageSize, bool FilterGone);
 
 /// <summary>

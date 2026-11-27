@@ -81,6 +81,35 @@ internal static class FilterResolver
         return new PreviewErrorInternal("InvalidChoice", $"kind — одно из {InstrumentKinds.Listed}") { Field = "kind" };
     }
 
+    /// <summary>
+    ///     The least score a list is asked for (change add-idea-score, design.md, decision 3): a whole number, or none when not
+    ///     given; another value refuses the request at the field <c>minScore</c>.
+    /// </summary>
+    public static int? MinScore(string? text)
+    {
+        return MinScoreError(text, out int? score) is { } error ? throw new IdeasRequestException([error]) : score;
+    }
+
+    /// <summary>
+    ///     The error of the least score <paramref name="text" />, null for a whole number or none.
+    /// </summary>
+    public static PreviewErrorInternal? MinScoreError(string? text, out int? score)
+    {
+        score = null;
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return null;
+        }
+
+        if (int.TryParse(text.Trim(), System.Globalization.NumberStyles.AllowLeadingSign, System.Globalization.CultureInfo.InvariantCulture, out int value))
+        {
+            score = value;
+            return null;
+        }
+
+        return new PreviewErrorInternal("InvalidMinScore", "балл от — целое число") { Field = "minScore" };
+    }
+
     public static IdeasRequestException Refused(IEnumerable<FilterProblem> problems)
     {
         return new IdeasRequestException([.. problems.Select(Error)]);

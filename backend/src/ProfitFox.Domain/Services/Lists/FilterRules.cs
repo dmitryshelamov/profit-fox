@@ -117,6 +117,12 @@ public static class FilterRules
                 return $"значение поля {field.Title} — число";
             }
 
+            // The score is a whole number (change add-idea-score, spec saved-filters «Поля фильтра»).
+            if (field.Name == ListFields.Score && (!Whole(condition.Value) || (condition.Operator == "between" && !Whole(condition.To))))
+            {
+                return $"значение поля {field.Title} — целое число";
+            }
+
             // A value that does not fit once in the unit of the store (task 18.17): 7.9e22 million is more than a decimal holds.
             if (!Fits(field, condition.Value) || (condition.Operator == "between" && !Fits(field, condition.To)))
             {
@@ -139,6 +145,11 @@ public static class FilterRules
         return field.Values is { } values && !values.Contains(condition.Value, StringComparer.Ordinal)
             ? $"значение поля {field.Title} — одно из {string.Join(", ", values)}"
             : null;
+    }
+
+    private static bool Whole(string? text)
+    {
+        return Number(text) is { } value && value == decimal.Truncate(value);
     }
 
     private static bool Fits(ListField field, string? text)

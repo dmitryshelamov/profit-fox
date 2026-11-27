@@ -56,6 +56,12 @@ public interface IIdeaRepository
     Task<IReadOnlyList<IdeaStrategyCount>> StrategyCountsAsync(IdeaListQuery query, CancellationToken cancellationToken);
 
     /// <summary>
+    ///     The closed ideas that match the query by their score now (change add-idea-score, spec idea-score «Итоги по баллу»):
+    ///     a row a score with at least one idea, from the highest score; excluded ideas do not count.
+    /// </summary>
+    Task<IReadOnlyList<IdeaScoreRow>> ScoresAsync(IdeaListQuery query, CancellationToken cancellationToken);
+
+    /// <summary>
     ///     How many open and how many closed ideas there are.
     /// </summary>
     Task<(int Open, int Closed)> CountsAsync(CancellationToken cancellationToken);
