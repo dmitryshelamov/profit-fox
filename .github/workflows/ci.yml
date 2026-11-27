@@ -1,0 +1,118 @@
+name: CI
+
+on:
+  push:
+    branches: [release/0.1.0]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    defaults:
+      run:
+        working-directory: backend
+
+    env:
+      DOTNET_NOLOGO: true
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore
+        run: dotnet restore ProfitFox.slnx
+
+      - name: Build
+        run: dotnet build ProfitFox.slnx --configuration Release --no-restore
+
+      # Only the code people write: the build puts generated code under obj/.
+      - name: Verify XML doc summaries
+        run: |
+          if grep -rnE --include='*.cs' --exclude-dir=obj --exclude-dir=bin '/// <summary>.+</summary>' src tests; then
+            echo "One-line <summary>; write it on three lines."
+            exit 1
+          fi
+
+      # The integration tests start Postgres in Docker (Testcontainers), which ubuntu-latest has.
+      - name: Test
+        run: >
+          dotnet test ProfitFox.slnx
+          --configuration Release
+          --no-build
+          --logger trx
+          --results-directory TestResults
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: backend/TestResults
+          if-no-files-found: ignore
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Check format
+        run: npm run format:check
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+  # The deploy key of firebat-01 passes its command to deploy.sh, so the script is linted and its parsing tested.
+  deploy-script:
+    name: Deploy script
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Check deploy.sh
+        run: |
+          shellcheck deploy/*.sh
+          bash deploy/deploy.test.sh

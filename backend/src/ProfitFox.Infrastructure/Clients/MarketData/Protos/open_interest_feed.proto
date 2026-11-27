@@ -1,0 +1,86 @@
+// Copy of profit-fox-market-data backend/src/ProfitFox.MarketData.Presentation/Protos/open_interest_feed.proto at 4145829;
+// only csharp_namespace differs. Update by copying again, never by editing the messages here.
+syntax = "proto3";
+
+package profitfox.marketdata.v1;
+
+import "google/protobuf/timestamp.proto";
+import "candle_feed.proto";
+
+option csharp_namespace = "ProfitFox.Infrastructure.Clients.MarketData.Protos";
+
+// The open interest of the catalog as it is collected.
+service OpenInterestFeed {
+  // Tells every point of open interest once it is stored, as it is stored, until the caller ends the call. With
+  // `since`, the stored ones of a time at or after it come first, oldest first, of every instrument, and the live ones
+  // follow with none left out. One may come twice on the way from the stored ones to the live ones: the caller takes
+  // them as one, by instrument and time. The response headers come once the subscription is in place.
+  //
+  // A live point is one of the collection, taken where a five-minute step starts. A step the collection missed is
+  // loaded from the history of the exchange and stored later; it is not told live. A caller that needs it subscribes
+  // again with `since`, or asks GET api/instruments/{id}/open-interest.
+  //
+  // INVALID_ARGUMENT: `since` is further back than the service catches up.
+  // RESOURCE_EXHAUSTED: the caller read slower than they came and is cut off; it subscribes again with `since`.
+  // UNAVAILABLE: the service is stopping; the caller subscribes again with `since` once it is back.
+  rpc Subscribe (SubscribeOpenInterestRequest) returns (stream OpenInterestUpdate);
+
+  // Tells the stored points of open interest over a window of past days, for backtests, and ends with OK. Only what
+  // will not change is told: the part of the window where the series of the instrument is loaded from the history of
+  // the exchange, and inside it every five-minute step the exchange has is stored; a spot pair or a share has none.
+  // Nothing is loaded from the exchange. Only instruments listed now are read: a delisted one is left out, even when
+  // named, so the history is the one of the market as it is listed today.
+  //
+  // The coverage comes first: one `InstrumentCoverage` for every instrument read, ordered by instrument id, with the
+  // parts of the window it covers; an instrument with none gets an empty one. The points follow, by time and, within
+  // one time, by instrument id, in an order that is the same on every read: the caller does not sort them. Read again,
+  // a window that was covered both times gives the same messages in the same order; a caller that checks it by a hash
+  // hashes the fields in the order they come, not the bytes of the messages, which protobuf does not keep the same.
+  //
+  // The service reads a few History calls at a time, those of every feed together; a call over that waits its turn
+  // before anything comes, until the caller cancels it. A call over the whole market and years is read day by day as
+  // the caller takes it: it takes long, not more memory.
+  //
+  // INVALID_ARGUMENT: the window does not end after it starts or ends after the start of the current UTC day; an
+  // exchange is not one of `Exchange` or is EXCHANGE_UNSPECIFIED; an instrument id is not an id.
+  // NOT_FOUND: an instrument id is not in the catalog.
+  // UNAVAILABLE: the service is stopping; the caller reads again once it is back.
+  rpc History (OpenInterestHistoryRequest) returns (stream OpenInterestHistoryItem);
+}
+
+message SubscribeOpenInterestRequest {
+  // Where to catch up from; absent means live ones only.
+  google.protobuf.Timestamp since = 1;
+}
+
+// A point of open interest. The value is a decimal number as text, exactly as stored: "52345.123".
+message OpenInterestUpdate {
+  // The id of the instrument in the catalog, as GET api/instruments gives it.
+  string instrument_id = 1;
+  google.protobuf.Timestamp time = 2;
+
+  // How much of the base asset the open contracts of the instrument hold at the time.
+  string open_interest = 3;
+}
+
+message OpenInterestHistoryRequest {
+  // The instruments to read, by their id in the catalog; none means every listed instrument of the exchanges asked for.
+  repeated string instrument_ids = 1;
+
+  // The exchanges whose instruments are read when none are named; none means all.
+  repeated Exchange exchanges = 2;
+
+  // Where the window starts, inclusive.
+  google.protobuf.Timestamp from = 3;
+
+  // Where the window ends, exclusive; not after the start of the current UTC day.
+  google.protobuf.Timestamp to = 4;
+}
+
+// What a call of OpenInterestFeed.History tells: first the coverage of every instrument, then the points.
+message OpenInterestHistoryItem {
+  oneof item {
+    InstrumentCoverage coverage = 1;
+    OpenInterestUpdate point = 2;
+  }
+}

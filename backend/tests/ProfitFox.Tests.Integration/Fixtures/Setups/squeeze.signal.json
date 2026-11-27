@@ -1,0 +1,97 @@
+{
+  "name": "squeeze",
+  "description": "Сжатие на свече: отношение ATR сетапа к close ниже 10-го перцентиля этого отношения за 200 свечей до неё.",
+  "graph": {
+    "formatVersion": 1,
+    "parameters": [],
+    "outputs": [
+      {
+        "name": "state",
+        "type": "boolean"
+      }
+    ],
+    "nodes": [
+      {
+        "id": "p",
+        "kind": "parameters"
+      },
+      {
+        "id": "c",
+        "kind": "candle"
+      },
+      {
+        "id": "atr",
+        "kind": "atr",
+        "inputs": {
+          "length": 14
+        }
+      },
+      {
+        "id": "atr-prev",
+        "kind": "previous"
+      },
+      {
+        "id": "atr-share",
+        "kind": "divide"
+      },
+      {
+        "id": "share-p10",
+        "kind": "percentile",
+        "inputs": {
+          "length": 200,
+          "rank": 0.1
+        }
+      },
+      {
+        "id": "share-p10-prev",
+        "kind": "previous"
+      },
+      {
+        "id": "squeeze",
+        "kind": "compare",
+        "settings": {
+          "operation": "lt"
+        }
+      },
+      {
+        "id": "out",
+        "kind": "outputs"
+      }
+    ],
+    "wires": [
+      {
+        "from": "atr.result",
+        "to": "atr-prev.value"
+      },
+      {
+        "from": "atr-prev.result",
+        "to": "atr-share.a"
+      },
+      {
+        "from": "c.close",
+        "to": "atr-share.b"
+      },
+      {
+        "from": "atr-share.result",
+        "to": "share-p10.value"
+      },
+      {
+        "from": "share-p10.result",
+        "to": "share-p10-prev.value"
+      },
+      {
+        "from": "atr-share.result",
+        "to": "squeeze.a"
+      },
+      {
+        "from": "share-p10-prev.result",
+        "to": "squeeze.b"
+      },
+      {
+        "from": "squeeze.result",
+        "to": "out.state"
+      }
+    ]
+  },
+  "layout": {}
+}

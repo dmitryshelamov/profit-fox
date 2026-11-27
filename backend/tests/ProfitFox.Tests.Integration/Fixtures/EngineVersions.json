@@ -1,0 +1,6 @@
+[
+  { "version": 1, "digests": { "H0001": "9873342ddf17fe032606e38c9f7d8afbcbcb45422ce721063dc072b7c0184236" } },
+  { "version": 2, "digests": { "H0001": "9873342ddf17fe032606e38c9f7d8afbcbcb45422ce721063dc072b7c0184236", "H0002": "75e15bac8bb8aa5a0ef198207a7eae57a89b7ae865f444e63d1cff74b7d2f4b7" } },
+  { "version": 3, "digests": { "H0001": "bb2020834bf88f0e630af56531ec9a11a1a0b0c5b8fa89e7b61dd7d8b7fa7333", "H0002": "3127e64f1fa671b4b75e054c365611976f7203cf40b1b6e3e751db0eae4bc0ad" } },
+  { "version": 4, "digests": { "H0001": "ba2db2a876f5182378be8b2ca8ffe167c54ced30c79e38d55ad7005bed8c8bd3", "H0002": "19df89874005239187394b79da717177c60b235a99b7670a8584aa05ff1cc4de" } }
+]

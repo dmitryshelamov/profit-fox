@@ -1,0 +1,148 @@
+name: Deploy
+
+# The pipeline of the profit-fox bench for its two images (the API with the page, and the Worker): a commit of release/0.1.0
+# whose CI passed gets the next version number N (tag vN), the images are built on a GitHub-hosted runner and pushed to GHCR
+# as :N, and the runner on soyo-03 deploys them to firebat-01 and firebat-02 once the owner approves the production
+# environment. Nothing is built in Russia: from there some nuget.org addresses fail at TLS.
+# Run by hand with a version number to deploy that version again or roll back to it; that run builds nothing.
+# Never runs for pull requests: workflow_run runs this file from the default branch, and only for a push to release/0.1.0 of
+# this repository.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [release/0.1.0]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to deploy, the N of tag vN
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  # The same number as DEPLOY_PROTOCOL in deploy/deploy.sh; the copy on the server refuses another one.
+  DEPLOY_PROTOCOL: 1
+
+jobs:
+  # One build at a time, so two commits never take the same number.
+  build:
+    if: >-
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'release/0.1.0' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      packages: write
+    concurrency:
+      group: deploy-build
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    env:
+      COMMIT: ${{ github.event.workflow_run.head_sha }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          # Every tag, to find the number of this commit or the largest one.
+          fetch-depth: 0
+
+      # A commit keeps the number it got; a new one gets the largest plus one. The push of a tag that exists fails.
+      - name: Version
+        id: version
+        run: |
+          numbers() { sed -n 's/^v\([1-9][0-9]*\)$/\1/p' | sort -n; }
+          version="$(git tag --points-at HEAD --list 'v*' | numbers | head -n 1)"
+          if [[ -z "$version" ]]; then
+            last="$(git tag --list 'v*' | numbers | tail -n 1)"
+            version=$((${last:-0} + 1))
+            git tag "v$version"
+            git push origin "refs/tags/v$version"
+          fi
+          echo "Version $version"
+          echo "version=$version" >>"$GITHUB_OUTPUT"
+
+      - name: Sign in to GHCR
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin <<<"$GH_TOKEN"
+
+      # An image of this number that is already in GHCR stays as it is. The context is the repository root: the API image
+      # needs frontend/ besides backend/.
+      - name: Build and push the images
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          build() {
+            local dockerfile="$2" image="ghcr.io/dmitryshelamov/$1:$VERSION"
+            if docker manifest inspect "$image" >/dev/null 2>&1; then
+              echo "$image is already published"
+              return
+            fi
+            docker build --tag "$image" --file "$dockerfile" \
+              --label "org.opencontainers.image.revision=$COMMIT" \
+              --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
+              .
+            docker push "$image"
+          }
+          build profit-fox backend/src/ProfitFox.Presentation/Dockerfile
+          build profit-fox-bench-worker backend/src/ProfitFox.Worker/Dockerfile
+
+  # The images of the version are in GHCR. Checked here, so the runner on soyo-03 needs neither Docker nor a token.
+  image:
+    needs: build
+    if: >-
+      !cancelled() && (needs.build.result == 'success' ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/release/0.1.0'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      packages: read
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+    env:
+      VERSION: ${{ needs.build.outputs.version || inputs.version }}
+    steps:
+      - name: Sign in to GHCR
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin <<<"$GH_TOKEN"
+
+      - name: Check the image
+        id: check
+        run: |
+          [[ "$VERSION" =~ ^[1-9][0-9]*$ ]] || { echo "Not a version: $VERSION"; exit 1; }
+          for name in profit-fox profit-fox-bench-worker; do
+            docker manifest inspect "ghcr.io/dmitryshelamov/$name:$VERSION" >/dev/null ||
+              { echo "ghcr.io/dmitryshelamov/$name:$VERSION is not published"; exit 1; }
+          done
+          echo "version=$VERSION" >>"$GITHUB_OUTPUT"
+
+  # One deploy at a time. The production environment waits for the owner's approval and admits only release/0.1.0.
+  deploy:
+    needs: image
+    if: ${{ !cancelled() && needs.image.result == 'success' }}
+    runs-on: [self-hosted, soyo-03]
+    timeout-minutes: 15
+    environment: production
+    concurrency:
+      group: deploy-production
+    env:
+      VERSION: ${{ needs.image.outputs.version }}
+    steps:
+      # The key can only run deploy.sh on firebat-01 and firebat-02; the key and known_hosts live in the runner's home,
+      # not in GitHub. firebat-01 goes first: its API migrates the database the Workers of firebat-02 use.
+      - name: Deploy firebat-01
+        run: >-
+          ssh -i ~/.ssh/profit-fox-deploy -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes
+          firebat@192.168.8.163 deploy "$VERSION" "$DEPLOY_PROTOCOL"
+      - name: Deploy firebat-02
+        run: >-
+          ssh -i ~/.ssh/profit-fox-deploy -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes
+          firebat@192.168.8.181 deploy "$VERSION" "$DEPLOY_PROTOCOL"

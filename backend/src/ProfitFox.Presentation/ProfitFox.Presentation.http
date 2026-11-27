@@ -1,0 +1,316 @@
+@ProfitFox.Presentation_HostAddress = http://localhost:5240
+
+GET {{ProfitFox.Presentation_HostAddress}}/api/instruments
+Accept: application/json
+
+###
+
+GET {{ProfitFox.Presentation_HostAddress}}/health
+
+###
+
+GET {{ProfitFox.Presentation_HostAddress}}/api/hypotheses
+Accept: application/json
+
+###
+
+# Loads the text of a hypothesis.json as a new version (201), or finds the version that has this text (200).
+# The body is sent as it is, so its hash is the hash of these bytes.
+POST {{ProfitFox.Presentation_HostAddress}}/api/hypotheses
+Content-Type: text/plain
+
+< ../../../bench/hypotheses/H0001-funding-short-4h/hypothesis.json
+
+###
+
+# Puts a run in the queue: period is exploration, holdout or new-data, kind is verdict or parity; version is optional.
+POST {{ProfitFox.Presentation_HostAddress}}/api/runs
+Content-Type: application/json
+
+{
+  "hypothesis": "H0001",
+  "period": "exploration",
+  "kind": "parity"
+}
+
+###
+
+# The runs that wait and go, in the order of the queue.
+GET {{ProfitFox.Presentation_HostAddress}}/api/runs?active=true
+Accept: application/json
+
+###
+
+# The latest runs that ended, the newest first.
+GET {{ProfitFox.Presentation_HostAddress}}/api/runs?active=false&limit=20
+Accept: application/json
+
+###
+
+# One run with its progress, its line of the ledger and its report.
+GET {{ProfitFox.Presentation_HostAddress}}/api/runs/f3659dd4ab7b437a945c9d2fd180b7dd
+Accept: application/json
+
+###
+
+# Takes a waiting run out of the queue, or asks the Worker of a going run to stop (204).
+POST {{ProfitFox.Presentation_HostAddress}}/api/runs/f3659dd4ab7b437a945c9d2fd180b7dd/cancel
+
+###
+
+POST {{ProfitFox.Presentation_HostAddress}}/api/preview
+Content-Type: application/json
+
+{
+  "instrument": "PRLUSDT",
+  "timeframe": "4h",
+  "signal": {
+    "formatVersion": 1,
+    "parameters": [{ "name": "threshold", "type": "number", "value": 0.0005 }],
+    "outputs": [{ "name": "entry", "type": "event" }],
+    "nodes": [
+      { "id": "p", "kind": "parameters" },
+      { "id": "rate", "kind": "funding-rate" },
+      { "id": "high", "kind": "compare", "settings": { "operation": "ge" } },
+      { "id": "first", "kind": "first-time" },
+      { "id": "out", "kind": "outputs" }
+    ],
+    "wires": [
+      { "from": "rate.value", "to": "high.a" },
+      { "from": "p.threshold", "to": "high.b" },
+      { "from": "high.result", "to": "first.value" },
+      { "from": "first.event", "to": "out.entry" }
+    ]
+  }
+}
+
+###
+
+###
+
+# The setups of v2 (change add-setup-strategies; README, «Сетапы»): the signals first, each remembering its id,
+# then the strategies, whose bodies take the ids for their placeholders by «<@». For the JetBrains HTTP client.
+
+### Signal accumulation
+POST {{ProfitFox.Presentation_HostAddress}}/api/signals
+Content-Type: application/json
+
+< ../../tests/ProfitFox.Tests.Integration/Fixtures/Setups/accumulation.signal.json
+
+> {% client.global.set("signal_accumulation", response.body.id); %}
+
+### Signal breakout-down
+POST {{ProfitFox.Presentation_HostAddress}}/api/signals
+Content-Type: application/json
+
+< ../../tests/ProfitFox.Tests.Integration/Fixtures/Setups/breakout-down.signal.json
+
+> {% client.global.set("signal_breakout_down", response.body.id); %}
+
+### Signal breakout-up
+POST {{ProfitFox.Presentation_HostAddress}}/api/signals
+Content-Type: application/json
+
+< ../../tests/ProfitFox.Tests.Integration/Fixtures/Setups/breakout-up.signal.json
+
+> {% client.global.set("signal_breakout_up", response.body.id); %}
+
+### Signal distribution
+POST {{ProfitFox.Presentation_HostAddress}}/api/signals
+Content-Type: application/json
+
+< ../../tests/ProfitFox.Tests.Integration/Fixtures/Setups/distribution.signal.json
+
+> {% client.global.set("signal_distribution", response.body.id); %}
+
+### Signal drop
+POST {{ProfitFox.Presentation_HostAddress}}/api/signals
+Content-Type: application/json
+
+< ../../tests/ProfitFox.Tests.Integration/Fixtures/Setups/drop.signal.json
+
+> {% client.global.set("signal_drop", response.body.id); %}
+
+### Signal early-drop
+POST {{ProfitFox.Presentation_HostAddress}}/api/signals
+Content-Type: application/json
+
+< ../../tests/ProfitFox.Tests.Integration/Fixtures/Setups/early-drop.signal.json
+
+> {% client.global.set("signal_early_drop", response.body.id); %}
+
+### Signal early-impulse
+POST {{ProfitFox.Presentation_HostAddress}}/api/signals
+Content-Type: application/json
+
+< ../../tests/ProfitFox.Tests.Integration/Fixtures/Setups/early-impulse.signal.json
+
+> {% client.global.set("signal_early_impulse", response.body.id); %}
+
+### Signal exhaustion-bottom
+POST {{ProfitFox.Presentation_HostAddress}}/api/signals
+Content-Type: application/json
+
+< ../../tests/ProfitFox.Tests.Integration/Fixtures/Setups/exhaustion-bottom.signal.json
+
+> {% client.global.set("signal_exhaustion_bottom", response.body.id); %}
+
+### Signal exhaustion-top
+POST {{ProfitFox.Presentation_HostAddress}}/api/signals
+Content-Type: application/json
+
+< ../../tests/ProfitFox.Tests.Integration/Fixtures/Setups/exhaustion-top.signal.json
+
+> {% client.global.set("signal_exhaustion_top", response.body.id); %}
+
+### Signal false-breakout-long
+POST {{ProfitFox.Presentation_HostAddress}}/api/signals
+Content-Type: application/json
+
+< ../../tests/ProfitFox.Tests.Integration/Fixtures/Setups/false-breakout-long.signal.json
+
+> {% client.global.set("signal_false_breakout_long", response.body.id); %}
+
+### Signal false-breakout-short
+POST {{ProfitFox.Presentation_HostAddress}}/api/signals
+Content-Type: application/json
+
+< ../../tests/ProfitFox.Tests.Integration/Fixtures/Setups/false-breakout-short.signal.json
+
+> {% client.global.set("signal_false_breakout_short", response.body.id); %}
+
+### Signal high-volatility
+POST {{ProfitFox.Presentation_HostAddress}}/api/signals
+Content-Type: application/json
+
+< ../../tests/ProfitFox.Tests.Integration/Fixtures/Setups/high-volatility.signal.json
+
+> {% client.global.set("signal_high_volatility", response.body.id); %}
+
+### Signal impulse
+POST {{ProfitFox.Presentation_HostAddress}}/api/signals
+Content-Type: application/json
+
+< ../../tests/ProfitFox.Tests.Integration/Fixtures/Setups/impulse.signal.json
+
+> {% client.global.set("signal_impulse", response.body.id); %}
+
+### Signal new-high
+POST {{ProfitFox.Presentation_HostAddress}}/api/signals
+Content-Type: application/json
+
+< ../../tests/ProfitFox.Tests.Integration/Fixtures/Setups/new-high.signal.json
+
+> {% client.global.set("signal_new_high", response.body.id); %}
+
+### Signal new-low
+POST {{ProfitFox.Presentation_HostAddress}}/api/signals
+Content-Type: application/json
+
+< ../../tests/ProfitFox.Tests.Integration/Fixtures/Setups/new-low.signal.json
+
+> {% client.global.set("signal_new_low", response.body.id); %}
+
+### Signal quiet-candle
+POST {{ProfitFox.Presentation_HostAddress}}/api/signals
+Content-Type: application/json
+
+< ../../tests/ProfitFox.Tests.Integration/Fixtures/Setups/quiet-candle.signal.json
+
+> {% client.global.set("signal_quiet_candle", response.body.id); %}
+
+### Signal rsi-overbought-exit
+POST {{ProfitFox.Presentation_HostAddress}}/api/signals
+Content-Type: application/json
+
+< ../../tests/ProfitFox.Tests.Integration/Fixtures/Setups/rsi-overbought-exit.signal.json
+
+> {% client.global.set("signal_rsi_overbought_exit", response.body.id); %}
+
+### Signal rsi-oversold-exit
+POST {{ProfitFox.Presentation_HostAddress}}/api/signals
+Content-Type: application/json
+
+< ../../tests/ProfitFox.Tests.Integration/Fixtures/Setups/rsi-oversold-exit.signal.json
+
+> {% client.global.set("signal_rsi_oversold_exit", response.body.id); %}
+
+### Signal squeeze
+POST {{ProfitFox.Presentation_HostAddress}}/api/signals
+Content-Type: application/json
+
+< ../../tests/ProfitFox.Tests.Integration/Fixtures/Setups/squeeze.signal.json
+
+> {% client.global.set("signal_squeeze", response.body.id); %}
+
+### Strategy accumulation
+POST {{ProfitFox.Presentation_HostAddress}}/api/strategies
+Content-Type: application/json
+
+<@ ../../tests/ProfitFox.Tests.Integration/Fixtures/Setups/accumulation.strategy.json
+
+### Strategy breakout
+POST {{ProfitFox.Presentation_HostAddress}}/api/strategies
+Content-Type: application/json
+
+<@ ../../tests/ProfitFox.Tests.Integration/Fixtures/Setups/breakout.strategy.json
+
+### Strategy drop
+POST {{ProfitFox.Presentation_HostAddress}}/api/strategies
+Content-Type: application/json
+
+<@ ../../tests/ProfitFox.Tests.Integration/Fixtures/Setups/drop.strategy.json
+
+### Strategy early-drop
+POST {{ProfitFox.Presentation_HostAddress}}/api/strategies
+Content-Type: application/json
+
+<@ ../../tests/ProfitFox.Tests.Integration/Fixtures/Setups/early-drop.strategy.json
+
+### Strategy early-impulse
+POST {{ProfitFox.Presentation_HostAddress}}/api/strategies
+Content-Type: application/json
+
+<@ ../../tests/ProfitFox.Tests.Integration/Fixtures/Setups/early-impulse.strategy.json
+
+### Strategy exhaustion
+POST {{ProfitFox.Presentation_HostAddress}}/api/strategies
+Content-Type: application/json
+
+<@ ../../tests/ProfitFox.Tests.Integration/Fixtures/Setups/exhaustion.strategy.json
+
+### Strategy false-breakout
+POST {{ProfitFox.Presentation_HostAddress}}/api/strategies
+Content-Type: application/json
+
+<@ ../../tests/ProfitFox.Tests.Integration/Fixtures/Setups/false-breakout.strategy.json
+
+### Strategy impulse
+POST {{ProfitFox.Presentation_HostAddress}}/api/strategies
+Content-Type: application/json
+
+<@ ../../tests/ProfitFox.Tests.Integration/Fixtures/Setups/impulse.strategy.json
+
+### Strategy new-extreme
+POST {{ProfitFox.Presentation_HostAddress}}/api/strategies
+Content-Type: application/json
+
+<@ ../../tests/ProfitFox.Tests.Integration/Fixtures/Setups/new-extreme.strategy.json
+
+### Strategy quiet-volume
+POST {{ProfitFox.Presentation_HostAddress}}/api/strategies
+Content-Type: application/json
+
+<@ ../../tests/ProfitFox.Tests.Integration/Fixtures/Setups/quiet-volume.strategy.json
+
+### Strategy rsi-extreme
+POST {{ProfitFox.Presentation_HostAddress}}/api/strategies
+Content-Type: application/json
+
+<@ ../../tests/ProfitFox.Tests.Integration/Fixtures/Setups/rsi-extreme.strategy.json
+
+### Strategy squeeze
+POST {{ProfitFox.Presentation_HostAddress}}/api/strategies
+Content-Type: application/json
+
+<@ ../../tests/ProfitFox.Tests.Integration/Fixtures/Setups/squeeze.strategy.json

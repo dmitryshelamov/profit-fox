@@ -1,0 +1,79 @@
+{
+  "name": "new-low",
+  "description": "Новый минимум: close ниже минимума low за extremeCandles свечей до текущей.",
+  "graph": {
+    "formatVersion": 1,
+    "parameters": [
+      {
+        "name": "extremeCandles",
+        "type": "number",
+        "value": 200
+      }
+    ],
+    "outputs": [
+      {
+        "name": "state",
+        "type": "boolean"
+      }
+    ],
+    "nodes": [
+      {
+        "id": "p",
+        "kind": "parameters"
+      },
+      {
+        "id": "c",
+        "kind": "candle"
+      },
+      {
+        "id": "range",
+        "kind": "window",
+        "settings": {
+          "operation": "min"
+        }
+      },
+      {
+        "id": "range-prev",
+        "kind": "previous"
+      },
+      {
+        "id": "state",
+        "kind": "compare",
+        "settings": {
+          "operation": "lt"
+        }
+      },
+      {
+        "id": "out",
+        "kind": "outputs"
+      }
+    ],
+    "wires": [
+      {
+        "from": "c.low",
+        "to": "range.value"
+      },
+      {
+        "from": "p.extremeCandles",
+        "to": "range.length"
+      },
+      {
+        "from": "range.result",
+        "to": "range-prev.value"
+      },
+      {
+        "from": "c.close",
+        "to": "state.a"
+      },
+      {
+        "from": "range-prev.result",
+        "to": "state.b"
+      },
+      {
+        "from": "state.result",
+        "to": "out.state"
+      }
+    ]
+  },
+  "layout": {}
+}

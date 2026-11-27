@@ -1,0 +1,28 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "bench-db",
+      "runtimeExecutable": "docker",
+      "runtimeArgs": ["compose", "up", "bench-db"],
+      "port": 5435
+    },
+    {
+      "name": "bench-api",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": ["run", "--project", "backend/src/ProfitFox.Presentation"],
+      "port": 5240
+    },
+    {
+      "name": "bench-worker",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": ["run", "--project", "backend/src/ProfitFox.Worker"]
+    },
+    {
+      "name": "frontend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "frontend", "run", "dev"],
+      "port": 5173
+    }
+  ]
+}

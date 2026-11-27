@@ -1,0 +1,806 @@
+[
+  {
+    "kind": "parameters",
+    "title": "Параметры",
+    "group": "Граф",
+    "inputs": [],
+    "outputs": [],
+    "settings": [],
+    "pinsFromGraph": "parameters"
+  },
+  {
+    "kind": "candle",
+    "title": "Свеча",
+    "group": "Данные",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "open",
+        "type": "number"
+      },
+      {
+        "name": "high",
+        "type": "number"
+      },
+      {
+        "name": "low",
+        "type": "number"
+      },
+      {
+        "name": "close",
+        "type": "number"
+      },
+      {
+        "name": "volume",
+        "type": "number"
+      }
+    ],
+    "settings": []
+  },
+  {
+    "kind": "funding-rate",
+    "title": "Фандинг",
+    "group": "Данные",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "value",
+        "type": "number"
+      }
+    ],
+    "settings": []
+  },
+  {
+    "kind": "pair-candle",
+    "title": "Свеча пары",
+    "group": "Данные",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "open",
+        "type": "number"
+      },
+      {
+        "name": "high",
+        "type": "number"
+      },
+      {
+        "name": "low",
+        "type": "number"
+      },
+      {
+        "name": "close",
+        "type": "number"
+      },
+      {
+        "name": "volume",
+        "type": "number"
+      }
+    ],
+    "settings": [
+      {
+        "name": "symbol",
+        "values": []
+      }
+    ]
+  },
+  {
+    "kind": "compare",
+    "title": "Сравнить",
+    "group": "Логика",
+    "inputs": [
+      {
+        "name": "a",
+        "type": "number"
+      },
+      {
+        "name": "b",
+        "type": "number"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "boolean"
+      }
+    ],
+    "settings": [
+      {
+        "name": "operation",
+        "values": ["gt", "ge", "lt", "le", "eq", "ne"]
+      }
+    ]
+  },
+  {
+    "kind": "previous",
+    "title": "Предыдущее",
+    "group": "Данные",
+    "inputs": [
+      {
+        "name": "value",
+        "type": "number"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "number"
+      }
+    ],
+    "settings": []
+  },
+  {
+    "kind": "and",
+    "title": "И",
+    "group": "Логика",
+    "inputs": [
+      {
+        "name": "a",
+        "type": "boolean"
+      },
+      {
+        "name": "b",
+        "type": "boolean"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "boolean"
+      }
+    ],
+    "settings": []
+  },
+  {
+    "kind": "or",
+    "title": "Или",
+    "group": "Логика",
+    "inputs": [
+      {
+        "name": "a",
+        "type": "boolean"
+      },
+      {
+        "name": "b",
+        "type": "boolean"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "boolean"
+      }
+    ],
+    "settings": []
+  },
+  {
+    "kind": "not",
+    "title": "Не",
+    "group": "Логика",
+    "inputs": [
+      {
+        "name": "value",
+        "type": "boolean"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "boolean"
+      }
+    ],
+    "settings": []
+  },
+  {
+    "kind": "first-time",
+    "title": "Впервые",
+    "group": "Логика",
+    "inputs": [
+      {
+        "name": "value",
+        "type": "boolean"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "event",
+        "type": "event"
+      }
+    ],
+    "settings": []
+  },
+  {
+    "kind": "add",
+    "title": "Сложить",
+    "group": "Числа",
+    "inputs": [
+      {
+        "name": "a",
+        "type": "number"
+      },
+      {
+        "name": "b",
+        "type": "number"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "number"
+      }
+    ],
+    "settings": []
+  },
+  {
+    "kind": "subtract",
+    "title": "Вычесть",
+    "group": "Числа",
+    "inputs": [
+      {
+        "name": "a",
+        "type": "number"
+      },
+      {
+        "name": "b",
+        "type": "number"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "number"
+      }
+    ],
+    "settings": []
+  },
+  {
+    "kind": "multiply",
+    "title": "Умножить",
+    "group": "Числа",
+    "inputs": [
+      {
+        "name": "a",
+        "type": "number"
+      },
+      {
+        "name": "b",
+        "type": "number"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "number"
+      }
+    ],
+    "settings": []
+  },
+  {
+    "kind": "divide",
+    "title": "Разделить",
+    "group": "Числа",
+    "inputs": [
+      {
+        "name": "a",
+        "type": "number"
+      },
+      {
+        "name": "b",
+        "type": "number"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "number"
+      }
+    ],
+    "settings": []
+  },
+  {
+    "kind": "min",
+    "title": "Меньшее",
+    "group": "Числа",
+    "inputs": [
+      {
+        "name": "a",
+        "type": "number"
+      },
+      {
+        "name": "b",
+        "type": "number"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "number"
+      }
+    ],
+    "settings": []
+  },
+  {
+    "kind": "max",
+    "title": "Большее",
+    "group": "Числа",
+    "inputs": [
+      {
+        "name": "a",
+        "type": "number"
+      },
+      {
+        "name": "b",
+        "type": "number"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "number"
+      }
+    ],
+    "settings": []
+  },
+  {
+    "kind": "select",
+    "title": "Выбрать",
+    "group": "Числа",
+    "inputs": [
+      {
+        "name": "when",
+        "type": "boolean"
+      },
+      {
+        "name": "a",
+        "type": "number"
+      },
+      {
+        "name": "b",
+        "type": "number"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "number"
+      }
+    ],
+    "settings": []
+  },
+  {
+    "kind": "window",
+    "title": "Окно",
+    "group": "Окна",
+    "inputs": [
+      {
+        "name": "value",
+        "type": "number"
+      },
+      {
+        "name": "length",
+        "type": "number"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "number"
+      }
+    ],
+    "settings": [
+      {
+        "name": "operation",
+        "values": ["max", "min", "sum", "average", "median", "first"]
+      }
+    ]
+  },
+  {
+    "kind": "percentile",
+    "title": "Перцентиль",
+    "group": "Окна",
+    "inputs": [
+      {
+        "name": "value",
+        "type": "number"
+      },
+      {
+        "name": "length",
+        "type": "number"
+      },
+      {
+        "name": "rank",
+        "type": "number"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "number"
+      }
+    ],
+    "settings": []
+  },
+  {
+    "kind": "hold",
+    "title": "Запомнить",
+    "group": "Окна",
+    "inputs": [
+      {
+        "name": "when",
+        "type": "boolean"
+      },
+      {
+        "name": "value",
+        "type": "number"
+      },
+      {
+        "name": "length",
+        "type": "number"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "number"
+      }
+    ],
+    "settings": []
+  },
+  {
+    "kind": "atr",
+    "title": "ATR",
+    "group": "Индикаторы",
+    "inputs": [
+      {
+        "name": "length",
+        "type": "number"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "number"
+      }
+    ],
+    "settings": []
+  },
+  {
+    "kind": "rsi",
+    "title": "RSI",
+    "group": "Индикаторы",
+    "inputs": [
+      {
+        "name": "value",
+        "type": "number"
+      },
+      {
+        "name": "length",
+        "type": "number"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "number"
+      }
+    ],
+    "settings": []
+  },
+  {
+    "kind": "zones",
+    "title": "Зоны",
+    "group": "Индикаторы",
+    "inputs": [
+      {
+        "name": "atr",
+        "type": "number"
+      },
+      {
+        "name": "price",
+        "type": "number"
+      },
+      {
+        "name": "length",
+        "type": "number"
+      },
+      {
+        "name": "merge",
+        "type": "number"
+      },
+      {
+        "name": "strength",
+        "type": "number"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "above",
+        "type": "number"
+      },
+      {
+        "name": "below",
+        "type": "number"
+      }
+    ],
+    "settings": []
+  },
+  {
+    "kind": "candles",
+    "title": "Срок в свечах",
+    "group": "Данные",
+    "inputs": [
+      {
+        "name": "count",
+        "type": "number"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "duration",
+        "type": "duration"
+      }
+    ],
+    "settings": []
+  },
+  {
+    "kind": "is-true",
+    "title": "Истинно",
+    "group": "Логика",
+    "inputs": [
+      {
+        "name": "value",
+        "type": "boolean"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "boolean"
+      }
+    ],
+    "settings": []
+  },
+  {
+    "kind": "position",
+    "title": "Позиция",
+    "group": "Позиция",
+    "inputs": [
+      {
+        "name": "orders",
+        "type": "order",
+        "many": true
+      }
+    ],
+    "outputs": [
+      {
+        "name": "position",
+        "type": "position"
+      },
+      {
+        "name": "open",
+        "type": "boolean"
+      },
+      {
+        "name": "quantity",
+        "type": "number"
+      },
+      {
+        "name": "averagePrice",
+        "type": "number"
+      },
+      {
+        "name": "lastEntryPrice",
+        "type": "number"
+      },
+      {
+        "name": "invested",
+        "type": "number"
+      },
+      {
+        "name": "sinceLastEntry",
+        "type": "duration"
+      }
+    ],
+    "settings": []
+  },
+  {
+    "kind": "enter",
+    "title": "Вход",
+    "group": "Позиция",
+    "inputs": [
+      {
+        "name": "when",
+        "type": "event"
+      },
+      {
+        "name": "size",
+        "type": "number"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "order",
+        "type": "order"
+      }
+    ],
+    "settings": [
+      {
+        "name": "side",
+        "values": ["long", "short"]
+      }
+    ]
+  },
+  {
+    "kind": "market-order",
+    "title": "Рыночная заявка",
+    "group": "Позиция",
+    "inputs": [
+      {
+        "name": "when",
+        "type": "boolean"
+      },
+      {
+        "name": "size",
+        "type": "number"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "order",
+        "type": "order"
+      }
+    ],
+    "settings": [
+      {
+        "name": "side",
+        "values": ["buy", "sell"]
+      },
+      {
+        "name": "sizeIn",
+        "values": ["amount", "quantity"]
+      }
+    ]
+  },
+  {
+    "kind": "limit-order",
+    "title": "Лимитная заявка",
+    "group": "Позиция",
+    "inputs": [
+      {
+        "name": "when",
+        "type": "boolean"
+      },
+      {
+        "name": "price",
+        "type": "number"
+      },
+      {
+        "name": "size",
+        "type": "number"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "order",
+        "type": "order"
+      }
+    ],
+    "settings": [
+      {
+        "name": "side",
+        "values": ["buy", "sell"]
+      },
+      {
+        "name": "sizeIn",
+        "values": ["amount", "quantity"]
+      }
+    ]
+  },
+  {
+    "kind": "close-position",
+    "title": "Закрыть позицию",
+    "group": "Позиция",
+    "inputs": [
+      {
+        "name": "when",
+        "type": "boolean"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "order",
+        "type": "order"
+      }
+    ],
+    "settings": []
+  },
+  {
+    "kind": "stop-loss",
+    "title": "Стоп",
+    "group": "Позиция",
+    "inputs": [
+      {
+        "name": "position",
+        "type": "position"
+      },
+      {
+        "name": "distance",
+        "type": "number"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "order",
+        "type": "order"
+      }
+    ],
+    "settings": []
+  },
+  {
+    "kind": "take-profit",
+    "title": "Цель",
+    "group": "Позиция",
+    "inputs": [
+      {
+        "name": "position",
+        "type": "position"
+      },
+      {
+        "name": "distance",
+        "type": "number"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "order",
+        "type": "order"
+      }
+    ],
+    "settings": []
+  },
+  {
+    "kind": "close-after",
+    "title": "Закрыть через",
+    "group": "Позиция",
+    "inputs": [
+      {
+        "name": "position",
+        "type": "position"
+      },
+      {
+        "name": "after",
+        "type": "duration"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "order",
+        "type": "order"
+      }
+    ],
+    "settings": []
+  },
+  {
+    "kind": "signal",
+    "title": "Сигнал",
+    "group": "Сигналы",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "event",
+        "type": "event"
+      }
+    ],
+    "settings": [
+      {
+        "name": "signal",
+        "values": []
+      },
+      {
+        "name": "version",
+        "values": []
+      }
+    ],
+    "pinsFromGraph": "signal"
+  }
+]

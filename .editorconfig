@@ -1,0 +1,250 @@
+# Code style of profit-fox, the same as profit-fox-market-data, derived from the owner's Rider settings (common_layer.DotSettings).
+#
+# Two kinds of keys live here:
+#   - Roslyn keys (dotnet_*, csharp_*, standard EditorConfig keys) are read by Rider, Visual Studio
+#     and `dotnet format`; `dotnet format backend/ProfitFox.slnx --verify-no-changes` checks them (CI does not run it yet).
+#     `dotnet format` fixes and verifies rules with severity warning or error and skips suggestion/silent.
+#   - ReSharper keys (resharper_*, ij_*) are read only by Rider/ReSharper; CI does not check them.
+# Roslyn severities mirror the ReSharper inspection severities from the same settings file.
+# Rider falls back to its own defaults for keys not set here. Keys marked "Rider default" pin those defaults,
+# so that Code Cleanup gives the same result on any machine.
+# The order of type members (File Layout: test methods of a fixture sorted by name) and the profiles of Code Cleanup have no
+# EditorConfig keys: they stay in common_layer.DotSettings.
+
+root = true
+
+[*]
+indent_style = space
+trim_trailing_whitespace = true
+
+[*.cs]
+indent_size = 4
+max_line_length = 170
+# No line feed at the end of a file (Rider default)
+insert_final_newline = false
+
+#### Roslyn: code style ####
+
+# Braces are required for if/else, for, foreach, while, do, using, lock and fixed (BRACES_FOR_*, Enforce*StatementBraces)
+csharp_prefer_braces = true:error
+
+# 'var' when the type is evident (CSharpVarKeywordUsage = UseVarWhenEvident).
+# Roslyn cannot express "built-in types: var only when evident": for built-in types it either always
+# wants var or always the explicit type, and either choice contradicts Rider (`var count = 0;` vs `int count = GetCount();`).
+# The built-in case is therefore left to Rider (resharper_csharp_for_built_in_types below).
+csharp_style_var_for_built_in_types = false:silent
+csharp_style_var_when_type_is_apparent = true:error
+csharp_style_var_elsewhere = false:error
+
+# No 'this.' qualifier (ArrangeThisQualifier)
+dotnet_style_qualification_for_field = false:error
+dotnet_style_qualification_for_property = false:error
+dotnet_style_qualification_for_method = false:error
+dotnet_style_qualification_for_event = false:error
+
+# Explicit access modifiers on types and members (ArrangeTypeMemberModifiers = ERROR, ArrangeTypeModifiers = WARNING).
+# Roslyn has one rule (IDE0040) for both, so it takes the stricter level.
+dotnet_style_require_accessibility_modifiers = for_non_interface_members:error
+
+# File-scoped namespaces (ArrangeNamespaceBody)
+csharp_style_namespace_declarations = file_scoped:warning
+
+# Explicit type in object creation, `new Foo()` instead of `new()` (OBJECT_CREATION_WHEN_TYPE_EVIDENT = ExplicitlyTyped).
+# Roslyn only stops suggesting `new()`; it has no rule that flags an existing `new()`.
+csharp_style_implicit_object_creation_when_type_is_apparent = false:error
+
+# Expression body for local functions (LOCAL_FUNCTION_BODY = ExpressionBody)
+csharp_style_expression_bodied_local_functions = true:suggestion
+
+# Block body for methods, operators and constructors, expression body for properties, indexers and accessors
+# (METHOD_OR_OPERATOR_BODY, CONSTRUCTOR_OR_DESTRUCTOR_BODY = BlockBody, ACCESSOR_OWNER_BODY = ExpressionBody: Rider defaults;
+# ArrangeMethodOrOperatorBody, ArrangeConstructorOrDestructorBody, ArrangeAccessorOwnerBody = ERROR)
+csharp_style_expression_bodied_methods = false:error
+csharp_style_expression_bodied_operators = false:error
+csharp_style_expression_bodied_conversion_operators = false:error
+csharp_style_expression_bodied_constructors = false:error
+csharp_style_expression_bodied_properties = true:error
+csharp_style_expression_bodied_indexers = true:error
+csharp_style_expression_bodied_accessors = true:error
+
+#### Roslyn: formatting ####
+
+# Blank line between groups of using directives (BLANK_LINES_BETWEEN_USING_GROUPS = 1)
+dotnet_separate_import_directive_groups = true
+
+# System.* usings first, as ReSharper does by default; otherwise dotnet format and Rider sort usings differently
+dotnet_sort_system_directives_first = true
+
+# No space after a cast: `(int)value` (SPACE_AFTER_TYPECAST_PARENTHESES = false)
+csharp_space_after_cast = false
+
+#### Roslyn: naming ####
+
+# Private instance fields: _camelCase (PrivateInstanceFields)
+dotnet_naming_rule.private_instance_fields_underscore_camel_case.symbols = private_fields
+dotnet_naming_rule.private_instance_fields_underscore_camel_case.style = underscore_camel_case
+dotnet_naming_rule.private_instance_fields_underscore_camel_case.severity = warning
+
+# Private static fields: PascalCase (PrivateStaticFields)
+dotnet_naming_rule.private_static_fields_pascal_case.symbols = private_static_fields
+dotnet_naming_rule.private_static_fields_pascal_case.style = pascal_case
+dotnet_naming_rule.private_static_fields_pascal_case.severity = warning
+
+# Private constants: PascalCase (ReSharper default for constants)
+dotnet_naming_rule.private_constants_pascal_case.symbols = private_constants
+dotnet_naming_rule.private_constants_pascal_case.style = pascal_case
+dotnet_naming_rule.private_constants_pascal_case.severity = warning
+
+dotnet_naming_symbols.private_fields.applicable_kinds = field
+dotnet_naming_symbols.private_fields.applicable_accessibilities = private
+
+dotnet_naming_symbols.private_static_fields.applicable_kinds = field
+dotnet_naming_symbols.private_static_fields.applicable_accessibilities = private
+dotnet_naming_symbols.private_static_fields.required_modifiers = static
+
+dotnet_naming_symbols.private_constants.applicable_kinds = field
+dotnet_naming_symbols.private_constants.applicable_accessibilities = private
+dotnet_naming_symbols.private_constants.required_modifiers = const
+
+dotnet_naming_style.underscore_camel_case.capitalization = camel_case
+dotnet_naming_style.underscore_camel_case.required_prefix = _
+
+dotnet_naming_style.pascal_case.capitalization = pascal_case
+
+#### ReSharper: code style (Rider only, not checked by dotnet format) ####
+
+resharper_csharp_for_built_in_types = use_var_when_evident
+resharper_csharp_for_simple_types = use_var_when_evident
+resharper_csharp_for_other_types = use_var_when_evident
+
+resharper_csharp_braces_for_for = required
+resharper_csharp_braces_for_foreach = required
+resharper_csharp_braces_for_ifelse = required
+resharper_csharp_braces_for_while = required
+
+resharper_csharp_object_creation_when_type_evident = explicitly_typed
+resharper_csharp_local_function_body = expression_body
+# Rider defaults
+resharper_csharp_method_or_operator_body = block_body
+resharper_csharp_constructor_or_destructor_body = block_body
+resharper_csharp_accessor_owner_body = expression_body
+
+# No trailing comma after the last item of enums, initializers and switch expressions (Rider default)
+resharper_csharp_trailing_comma_in_multiline_lists = false
+resharper_csharp_trailing_comma_in_singleline_lists = false
+
+# Named arguments for literal values, except for a single argument
+resharper_csharp_arguments_literal = named
+resharper_csharp_arguments_skip_single = true
+
+#### ReSharper: formatting (Rider only, not checked by dotnet format) ####
+
+# Blank lines
+resharper_csharp_blank_lines_before_control_transfer_statements = 1
+resharper_csharp_blank_lines_before_block_statements = 1
+resharper_csharp_blank_lines_before_single_line_comment = 1
+resharper_csharp_blank_lines_around_single_line_local_method = 1
+resharper_csharp_blank_lines_between_using_groups = 1
+resharper_csharp_keep_blank_lines_in_code = 1
+resharper_csharp_keep_blank_lines_in_declarations = 1
+
+# Line breaks
+resharper_csharp_keep_existing_declaration_parens_arrangement = false
+resharper_csharp_keep_existing_embedded_arrangement = false
+resharper_csharp_keep_existing_expr_member_arrangement = false
+resharper_csharp_keep_existing_invocation_parens_arrangement = false
+resharper_csharp_place_accessorholder_attribute_on_same_line = false
+resharper_csharp_place_field_attribute_on_same_line = false
+resharper_csharp_place_expr_method_on_single_line = true
+resharper_csharp_place_expr_property_on_single_line = true
+resharper_csharp_place_simple_embedded_statement_on_same_line = false
+resharper_csharp_new_line_before_while = true
+resharper_csharp_stick_comment = false
+
+# Wrapping (hard wrap at max_line_length above)
+resharper_csharp_wrap_after_declaration_lpar = true
+resharper_csharp_wrap_after_invocation_lpar = true
+resharper_csharp_wrap_arguments_style = chop_if_long
+resharper_csharp_wrap_parameters_style = chop_if_long
+resharper_csharp_wrap_chained_method_calls = chop_if_long
+resharper_csharp_wrap_extends_list_style = chop_if_long
+resharper_csharp_wrap_linq_expressions = chop_always
+resharper_csharp_wrap_before_extends_colon = true
+resharper_csharp_wrap_before_first_type_parameter_constraint = true
+resharper_csharp_wrap_before_linq_expression = true
+resharper_csharp_align_multiline_binary_expressions_chain = false
+# Array items fill a line before wrapping, unlike arguments and parameters (Rider default)
+resharper_csharp_wrap_array_initializer_style = wrap_if_long
+
+# Lines of a multiline raw string literal ("""...""") are aligned with its opening quotes (Rider default)
+resharper_csharp_indent_raw_literal_string = align
+
+# Spaces
+resharper_csharp_space_within_single_line_array_initializer_braces = true
+
+# Attributes: each in brackets of its own, and on one line a space between them: `[FromQuery] [BindRequired] string interval`.
+# The formatter of Roslyn deletes that space and has no option for it, so `dotnet format` reports such lines.
+resharper_csharp_force_attribute_style = separate
+resharper_csharp_space_between_attribute_sections = true
+
+# XML doc comments: `<see cref="X" />`, text inside a multiline tag indented by one level (Rider defaults)
+resharper_xmldoc_space_before_self_closing = true
+resharper_xmldoc_indent_text = one_indent
+# Formatting a doc comment wraps its text at 180 columns (XmlDocFormatter/WRAP_LIMIT), not at max_line_length of the code
+resharper_xmldoc_max_line_length = 180
+
+#### ReSharper: inspection severities (Rider only, not checked by dotnet format) ####
+
+resharper_arguments_style_literal_highlighting = error
+resharper_arrange_accessor_owner_body_highlighting = error
+resharper_arrange_attributes_highlighting = error
+resharper_arrange_constructor_or_destructor_body_highlighting = error
+resharper_arrange_method_or_operator_body_highlighting = error
+resharper_arrange_missing_parentheses_highlighting = warning
+resharper_arrange_namespace_body_highlighting = warning
+resharper_arrange_object_creation_when_type_evident_highlighting = error
+resharper_arrange_this_qualifier_highlighting = error
+resharper_arrange_type_member_modifiers_highlighting = error
+resharper_arrange_type_modifiers_highlighting = warning
+resharper_auto_property_can_be_made_get_only_global_highlighting = none
+resharper_auto_property_can_be_made_get_only_local_highlighting = none
+resharper_bad_braces_spaces_highlighting = warning
+resharper_bad_control_braces_indent_highlighting = warning
+resharper_bad_control_braces_line_breaks_highlighting = warning
+resharper_bad_declaration_braces_indent_highlighting = warning
+resharper_bad_declaration_braces_line_breaks_highlighting = warning
+resharper_bad_empty_braces_line_breaks_highlighting = warning
+resharper_bad_expression_braces_indent_highlighting = warning
+resharper_bad_expression_braces_line_breaks_highlighting = warning
+resharper_bad_namespace_braces_indent_highlighting = warning
+resharper_class_can_be_sealed_global_highlighting = warning
+resharper_class_can_be_sealed_local_highlighting = warning
+resharper_enforce_do_while_statement_braces_highlighting = error
+resharper_enforce_fixed_statement_braces_highlighting = error
+resharper_enforce_foreach_statement_braces_highlighting = error
+resharper_enforce_for_statement_braces_highlighting = error
+resharper_enforce_if_statement_braces_highlighting = error
+resharper_enforce_lock_statement_braces_highlighting = error
+resharper_enforce_using_statement_braces_highlighting = error
+resharper_enforce_while_statement_braces_highlighting = error
+resharper_incorrect_blank_lines_near_braces_highlighting = warning
+resharper_remove_redundant_braces_highlighting = error
+resharper_suggest_var_or_type_built_in_types_highlighting = error
+resharper_suggest_var_or_type_deconstruction_declarations_highlighting = warning
+resharper_suggest_var_or_type_elsewhere_highlighting = error
+resharper_suggest_var_or_type_simple_types_highlighting = error
+resharper_tabs_are_disallowed_highlighting = warning
+resharper_unnecessary_whitespace_highlighting = error
+
+[*.{csproj,props,targets}]
+indent_size = 4
+# `<Foo />` is written as `<Foo/>` (Rider default)
+resharper_xml_space_before_self_closing = false
+
+[*.md]
+# Rider hard-wraps long lines at 120 and puts a blank line around headings and block elements (Rider defaults).
+# A wrapped line that starts with "<number>. " becomes a list item: rephrase or move the number to the previous line.
+max_line_length = 120
+ij_markdown_wrap_text_if_long = true
+ij_markdown_min_lines_around_header = 1
+ij_markdown_min_lines_around_block_elements = 1

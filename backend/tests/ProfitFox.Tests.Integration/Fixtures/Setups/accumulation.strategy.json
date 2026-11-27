@@ -1,0 +1,355 @@
+{
+  "name": "accumulation",
+  "description": "Накопление и распределение (сигналы accumulation и distribution); окно сетапа — 20 последних свечей. Вход по рынку на событии сетапа, стоп — расстояние от close до экстремума окна сетапа против входа плюс stopBuffer ATR 14 прошлой свечи, долей close; цель — targetR стопов; срок — lifeCandles свечей таймфрейма.",
+  "kind": "idea",
+  "graph": {
+    "formatVersion": 1,
+    "parameters": [
+      {
+        "name": "biasRatio",
+        "type": "number",
+        "value": 1.5
+      },
+      {
+        "name": "flatMove",
+        "type": "number",
+        "value": 0.5
+      },
+      {
+        "name": "stopBuffer",
+        "type": "number",
+        "value": 1.5
+      },
+      {
+        "name": "targetR",
+        "type": "number",
+        "value": 2
+      },
+      {
+        "name": "lifeCandles",
+        "type": "number",
+        "value": 24
+      },
+      {
+        "name": "size",
+        "type": "number",
+        "value": 100
+      }
+    ],
+    "outputs": [],
+    "nodes": [
+      {
+        "id": "p",
+        "kind": "parameters"
+      },
+      {
+        "id": "c",
+        "kind": "candle"
+      },
+      {
+        "id": "position",
+        "kind": "position"
+      },
+      {
+        "id": "atr",
+        "kind": "atr",
+        "inputs": {
+          "length": 14
+        }
+      },
+      {
+        "id": "atr-prev",
+        "kind": "previous"
+      },
+      {
+        "id": "buffer",
+        "kind": "multiply"
+      },
+      {
+        "id": "accumulation",
+        "kind": "signal",
+        "settings": {
+          "signal": "{{signal_accumulation}}",
+          "version": "1"
+        }
+      },
+      {
+        "id": "first-long",
+        "kind": "first-time"
+      },
+      {
+        "id": "enter-long",
+        "kind": "enter",
+        "settings": {
+          "side": "long"
+        }
+      },
+      {
+        "id": "setup-min",
+        "kind": "window",
+        "settings": {
+          "operation": "min"
+        },
+        "inputs": {
+          "length": 20
+        }
+      },
+      {
+        "id": "gap-long",
+        "kind": "subtract"
+      },
+      {
+        "id": "room-long",
+        "kind": "add"
+      },
+      {
+        "id": "stop-long",
+        "kind": "divide"
+      },
+      {
+        "id": "distribution",
+        "kind": "signal",
+        "settings": {
+          "signal": "{{signal_distribution}}",
+          "version": "1"
+        }
+      },
+      {
+        "id": "first-short",
+        "kind": "first-time"
+      },
+      {
+        "id": "enter-short",
+        "kind": "enter",
+        "settings": {
+          "side": "short"
+        }
+      },
+      {
+        "id": "setup-max",
+        "kind": "window",
+        "settings": {
+          "operation": "max"
+        },
+        "inputs": {
+          "length": 20
+        }
+      },
+      {
+        "id": "gap-short",
+        "kind": "subtract"
+      },
+      {
+        "id": "room-short",
+        "kind": "add"
+      },
+      {
+        "id": "stop-short",
+        "kind": "divide"
+      },
+      {
+        "id": "stop",
+        "kind": "select"
+      },
+      {
+        "id": "target",
+        "kind": "multiply"
+      },
+      {
+        "id": "life",
+        "kind": "candles"
+      },
+      {
+        "id": "stop-loss",
+        "kind": "stop-loss"
+      },
+      {
+        "id": "take-profit",
+        "kind": "take-profit"
+      },
+      {
+        "id": "close-after",
+        "kind": "close-after"
+      }
+    ],
+    "wires": [
+      {
+        "from": "atr.result",
+        "to": "atr-prev.value"
+      },
+      {
+        "from": "atr-prev.result",
+        "to": "buffer.a"
+      },
+      {
+        "from": "p.stopBuffer",
+        "to": "buffer.b"
+      },
+      {
+        "from": "p.biasRatio",
+        "to": "accumulation.biasRatio"
+      },
+      {
+        "from": "p.flatMove",
+        "to": "accumulation.flatMove"
+      },
+      {
+        "from": "accumulation.value",
+        "to": "first-long.value"
+      },
+      {
+        "from": "first-long.event",
+        "to": "enter-long.when"
+      },
+      {
+        "from": "p.size",
+        "to": "enter-long.size"
+      },
+      {
+        "from": "enter-long.order",
+        "to": "position.orders"
+      },
+      {
+        "from": "c.low",
+        "to": "setup-min.value"
+      },
+      {
+        "from": "c.close",
+        "to": "gap-long.a"
+      },
+      {
+        "from": "setup-min.result",
+        "to": "gap-long.b"
+      },
+      {
+        "from": "gap-long.result",
+        "to": "room-long.a"
+      },
+      {
+        "from": "buffer.result",
+        "to": "room-long.b"
+      },
+      {
+        "from": "room-long.result",
+        "to": "stop-long.a"
+      },
+      {
+        "from": "c.close",
+        "to": "stop-long.b"
+      },
+      {
+        "from": "p.biasRatio",
+        "to": "distribution.biasRatio"
+      },
+      {
+        "from": "p.flatMove",
+        "to": "distribution.flatMove"
+      },
+      {
+        "from": "distribution.value",
+        "to": "first-short.value"
+      },
+      {
+        "from": "first-short.event",
+        "to": "enter-short.when"
+      },
+      {
+        "from": "p.size",
+        "to": "enter-short.size"
+      },
+      {
+        "from": "enter-short.order",
+        "to": "position.orders"
+      },
+      {
+        "from": "c.high",
+        "to": "setup-max.value"
+      },
+      {
+        "from": "setup-max.result",
+        "to": "gap-short.a"
+      },
+      {
+        "from": "c.close",
+        "to": "gap-short.b"
+      },
+      {
+        "from": "gap-short.result",
+        "to": "room-short.a"
+      },
+      {
+        "from": "buffer.result",
+        "to": "room-short.b"
+      },
+      {
+        "from": "room-short.result",
+        "to": "stop-short.a"
+      },
+      {
+        "from": "c.close",
+        "to": "stop-short.b"
+      },
+      {
+        "from": "accumulation.value",
+        "to": "stop.when"
+      },
+      {
+        "from": "stop-long.result",
+        "to": "stop.a"
+      },
+      {
+        "from": "stop-short.result",
+        "to": "stop.b"
+      },
+      {
+        "from": "stop.result",
+        "to": "target.a"
+      },
+      {
+        "from": "p.targetR",
+        "to": "target.b"
+      },
+      {
+        "from": "p.lifeCandles",
+        "to": "life.count"
+      },
+      {
+        "from": "position.position",
+        "to": "stop-loss.position"
+      },
+      {
+        "from": "stop.result",
+        "to": "stop-loss.distance"
+      },
+      {
+        "from": "position.position",
+        "to": "take-profit.position"
+      },
+      {
+        "from": "target.result",
+        "to": "take-profit.distance"
+      },
+      {
+        "from": "position.position",
+        "to": "close-after.position"
+      },
+      {
+        "from": "life.duration",
+        "to": "close-after.after"
+      },
+      {
+        "from": "stop-loss.order",
+        "to": "position.orders"
+      },
+      {
+        "from": "take-profit.order",
+        "to": "position.orders"
+      },
+      {
+        "from": "close-after.order",
+        "to": "position.orders"
+      }
+    ]
+  },
+  "layout": {}
+}

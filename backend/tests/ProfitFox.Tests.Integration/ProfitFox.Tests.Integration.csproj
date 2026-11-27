@@ -1,0 +1,37 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <ItemGroup>
+        <PackageReference Include="coverlet.collector"/>
+        <PackageReference Include="Grpc.AspNetCore"/>
+        <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing"/>
+        <PackageReference Include="Microsoft.AspNetCore.TestHost"/>
+        <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing"/>
+        <PackageReference Include="Microsoft.NET.Test.Sdk"/>
+        <PackageReference Include="NUnit"/>
+        <PackageReference Include="NUnit.Analyzers"/>
+        <PackageReference Include="NUnit3TestAdapter"/>
+        <PackageReference Include="Testcontainers.PostgreSql"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <None Include="Fixtures\**\*.json" CopyToOutputDirectory="PreserveNewest"/>
+        <None Include="..\ProfitFox.Tests.Unit\Fixtures\ladder.json" Link="Fixtures\ladder.json" CopyToOutputDirectory="PreserveNewest"/>
+        <None Include="..\ProfitFox.Tests.Unit\Fixtures\H0001.strategy.json" Link="Fixtures\H0001.strategy.json" CopyToOutputDirectory="PreserveNewest"/>
+        <None Include="..\ProfitFox.Tests.Unit\Fixtures\H0002.strategy.json" Link="Fixtures\H0002.strategy.json" CopyToOutputDirectory="PreserveNewest"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <Using Include="NUnit.Framework"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\..\src\ProfitFox.Domain\ProfitFox.Domain.csproj"/>
+        <ProjectReference Include="..\..\src\ProfitFox.Application\ProfitFox.Application.csproj"/>
+        <ProjectReference Include="..\..\src\ProfitFox.Infrastructure\ProfitFox.Infrastructure.csproj"/>
+        <ProjectReference Include="..\..\src\ProfitFox.Presentation\ProfitFox.Presentation.csproj"/>
+        <ProjectReference Include="..\..\src\ProfitFox.Worker\ProfitFox.Worker.csproj"/>
+        <ProjectReference Include="..\..\src\ProfitFox.Cli\ProfitFox.Cli.csproj"/>
+        <ProjectReference Include="..\ProfitFox.Tests.Shared\ProfitFox.Tests.Shared.csproj"/>
+    </ItemGroup>
+
+</Project>

@@ -1,0 +1,65 @@
+@import 'tailwindcss';
+
+/*
+ * The theme of the bench (change redesign-bench-ui, design.md, decision 2): the palette of profit-fox-v2 with the
+ * colors of an event, of the status backgrounds and of the node groups. Pages name these tokens, never a color of
+ * Tailwind or a hex code. `static` keeps every token in the built CSS, used or not.
+ */
+@theme static {
+  /* The palette of Tailwind is switched off: a class of its colors gives none, only the tokens below do. */
+  --color-*: initial;
+
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
+  /* The display cut of Inter at every size, as the mockups are set: its text is narrower than the text cut. */
+  --font-sans--font-variation-settings: 'opsz' 32;
+  --font-mono: 'JetBrains Mono Variable', ui-monospace, 'SF Mono', Menlo, monospace;
+
+  --color-app: #14161b;
+  --color-canvas: #101216;
+  --color-panel: #1b1e25;
+  --color-panel-2: #232731;
+  --color-line: #2c313b;
+  --color-text: #e7e9ee;
+  --color-muted: #8c94a3;
+  --color-faint: #5d6573;
+  --color-accent: #f28c28;
+  --color-on-accent: #1a1206;
+  --color-run: #7aa7ff;
+  --color-run-bg: #1c2a47;
+  --color-ok: #3fb37f;
+  --color-ok-bg: #16332a;
+  --color-warn: #e0a43a;
+  --color-warn-bg: #3a2e16;
+  --color-err: #e5484d;
+  --color-err-bg: #3a1d20;
+  --color-chip: #2d323d;
+  --color-node: #262a33;
+  --color-node-line: #3a404c;
+  --color-pin-number: #8bd450;
+  --color-pin-boolean: #e5534b;
+  --color-pin-duration: #a78bfa;
+  --color-pin-event: #f5b84a;
+  --color-pin-order: #4fc3d9;
+  --color-pin-position: #e879b9;
+  --color-group-graph: #4a5060;
+  --color-group-data: #2e6e93;
+  --color-group-logic: #5b49c9;
+  --color-group-position: #2f8f6b;
+  --color-group-signal: #b0591a;
+  --color-group-math: #8c6b2e;
+  --color-group-window: #8a3f6e;
+  --color-group-indicator: #6a7d1f;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background-color: var(--color-app);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: 13px;
+}

@@ -1,0 +1,58 @@
+{
+  "name": "funding-short",
+  "description": "Стратегия H0001: шорт на событии funding-high, выход через четыре часа.",
+  "kind": "idea",
+  "graph": {
+    "formatVersion": 1,
+    "nodes": [
+      {
+        "id": "s",
+        "kind": "signal",
+        "settings": {
+          "signal": "{{signal_funding_high}}",
+          "version": "1"
+        }
+      },
+      {
+        "id": "enter",
+        "kind": "enter",
+        "settings": {
+          "side": "short"
+        },
+        "inputs": {
+          "size": 100
+        }
+      },
+      {
+        "id": "close-after",
+        "kind": "close-after",
+        "inputs": {
+          "after": "4h"
+        }
+      },
+      {
+        "id": "position",
+        "kind": "position"
+      }
+    ],
+    "wires": [
+      {
+        "from": "s.event",
+        "to": "enter.when"
+      },
+      {
+        "from": "enter.order",
+        "to": "position.orders"
+      },
+      {
+        "from": "position.position",
+        "to": "close-after.position"
+      },
+      {
+        "from": "close-after.order",
+        "to": "position.orders"
+      }
+    ]
+  },
+  "layout": {}
+}

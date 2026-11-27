@@ -1,0 +1,23 @@
+<Solution>
+    <Folder Name="/common/">
+        <File Path="..\.editorconfig" />
+        <File Path="..\.gitignore" />
+        <File Path=".globalconfig" />
+        <File Path="Directory.Build.props" />
+        <File Path="Directory.Build.targets" />
+        <File Path="Directory.Packages.props" />
+    </Folder>
+    <Folder Name="/src/">
+        <Project Path="src/ProfitFox.Presentation/ProfitFox.Presentation.csproj" />
+        <Project Path="src/ProfitFox.Cli/ProfitFox.Cli.csproj" />
+        <Project Path="src/ProfitFox.Application/ProfitFox.Application.csproj" />
+        <Project Path="src/ProfitFox.Domain/ProfitFox.Domain.csproj" />
+        <Project Path="src/ProfitFox.Infrastructure/ProfitFox.Infrastructure.csproj" />
+        <Project Path="src/ProfitFox.Worker/ProfitFox.Worker.csproj" />
+    </Folder>
+    <Folder Name="/tests/">
+        <Project Path="tests/ProfitFox.Tests.Integration/ProfitFox.Tests.Integration.csproj" />
+        <Project Path="tests/ProfitFox.Tests.Shared/ProfitFox.Tests.Shared.csproj" />
+        <Project Path="tests/ProfitFox.Tests.Unit/ProfitFox.Tests.Unit.csproj" />
+    </Folder>
+</Solution>

@@ -1,0 +1,185 @@
+{
+  "name": "quiet-candle",
+  "description": "Тихая свеча: объём не меньше quietVolume медиан при теле меньше quietBody ATR.",
+  "graph": {
+    "formatVersion": 1,
+    "parameters": [
+      {
+        "name": "quietVolume",
+        "type": "number",
+        "value": 3.0
+      },
+      {
+        "name": "quietBody",
+        "type": "number",
+        "value": 0.3
+      }
+    ],
+    "outputs": [
+      {
+        "name": "state",
+        "type": "boolean"
+      }
+    ],
+    "nodes": [
+      {
+        "id": "p",
+        "kind": "parameters"
+      },
+      {
+        "id": "c",
+        "kind": "candle"
+      },
+      {
+        "id": "atr",
+        "kind": "atr",
+        "inputs": {
+          "length": 14
+        }
+      },
+      {
+        "id": "atr-prev",
+        "kind": "previous"
+      },
+      {
+        "id": "vol-median",
+        "kind": "window",
+        "settings": {
+          "operation": "median"
+        },
+        "inputs": {
+          "length": 20
+        }
+      },
+      {
+        "id": "vol-median-prev",
+        "kind": "previous"
+      },
+      {
+        "id": "vol-ratio",
+        "kind": "divide"
+      },
+      {
+        "id": "body-top",
+        "kind": "max"
+      },
+      {
+        "id": "body-bottom",
+        "kind": "min"
+      },
+      {
+        "id": "body",
+        "kind": "subtract"
+      },
+      {
+        "id": "vol-ok",
+        "kind": "compare",
+        "settings": {
+          "operation": "ge"
+        }
+      },
+      {
+        "id": "body-atr",
+        "kind": "divide"
+      },
+      {
+        "id": "body-ok",
+        "kind": "compare",
+        "settings": {
+          "operation": "lt"
+        }
+      },
+      {
+        "id": "state",
+        "kind": "and"
+      },
+      {
+        "id": "out",
+        "kind": "outputs"
+      }
+    ],
+    "wires": [
+      {
+        "from": "atr.result",
+        "to": "atr-prev.value"
+      },
+      {
+        "from": "c.volume",
+        "to": "vol-median.value"
+      },
+      {
+        "from": "vol-median.result",
+        "to": "vol-median-prev.value"
+      },
+      {
+        "from": "c.volume",
+        "to": "vol-ratio.a"
+      },
+      {
+        "from": "vol-median-prev.result",
+        "to": "vol-ratio.b"
+      },
+      {
+        "from": "c.open",
+        "to": "body-top.a"
+      },
+      {
+        "from": "c.close",
+        "to": "body-top.b"
+      },
+      {
+        "from": "c.open",
+        "to": "body-bottom.a"
+      },
+      {
+        "from": "c.close",
+        "to": "body-bottom.b"
+      },
+      {
+        "from": "body-top.result",
+        "to": "body.a"
+      },
+      {
+        "from": "body-bottom.result",
+        "to": "body.b"
+      },
+      {
+        "from": "vol-ratio.result",
+        "to": "vol-ok.a"
+      },
+      {
+        "from": "p.quietVolume",
+        "to": "vol-ok.b"
+      },
+      {
+        "from": "body.result",
+        "to": "body-atr.a"
+      },
+      {
+        "from": "atr-prev.result",
+        "to": "body-atr.b"
+      },
+      {
+        "from": "body-atr.result",
+        "to": "body-ok.a"
+      },
+      {
+        "from": "p.quietBody",
+        "to": "body-ok.b"
+      },
+      {
+        "from": "vol-ok.result",
+        "to": "state.a"
+      },
+      {
+        "from": "body-ok.result",
+        "to": "state.b"
+      },
+      {
+        "from": "state.result",
+        "to": "out.state"
+      }
+    ]
+  },
+  "layout": {}
+}

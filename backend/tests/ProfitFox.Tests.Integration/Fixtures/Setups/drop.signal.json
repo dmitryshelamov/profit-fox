@@ -1,0 +1,196 @@
+{
+  "name": "drop",
+  "description": "Падение: то же, что impulse, вниз.",
+  "graph": {
+    "formatVersion": 1,
+    "parameters": [
+      {
+        "name": "candles",
+        "type": "number",
+        "value": 6
+      },
+      {
+        "name": "move",
+        "type": "number",
+        "value": 3.0
+      },
+      {
+        "name": "volume",
+        "type": "number",
+        "value": 2.0
+      }
+    ],
+    "outputs": [
+      {
+        "name": "state",
+        "type": "boolean"
+      }
+    ],
+    "nodes": [
+      {
+        "id": "p",
+        "kind": "parameters"
+      },
+      {
+        "id": "c",
+        "kind": "candle"
+      },
+      {
+        "id": "atr",
+        "kind": "atr",
+        "inputs": {
+          "length": 14
+        }
+      },
+      {
+        "id": "atr-prev",
+        "kind": "previous"
+      },
+      {
+        "id": "vol-median",
+        "kind": "window",
+        "settings": {
+          "operation": "median"
+        },
+        "inputs": {
+          "length": 20
+        }
+      },
+      {
+        "id": "vol-median-prev",
+        "kind": "previous"
+      },
+      {
+        "id": "first-open",
+        "kind": "window",
+        "settings": {
+          "operation": "first"
+        }
+      },
+      {
+        "id": "move",
+        "kind": "subtract"
+      },
+      {
+        "id": "move-atr",
+        "kind": "divide"
+      },
+      {
+        "id": "move-ok",
+        "kind": "compare",
+        "settings": {
+          "operation": "ge"
+        }
+      },
+      {
+        "id": "vol-average",
+        "kind": "window",
+        "settings": {
+          "operation": "average"
+        }
+      },
+      {
+        "id": "vol-average-ratio",
+        "kind": "divide"
+      },
+      {
+        "id": "vol-ok",
+        "kind": "compare",
+        "settings": {
+          "operation": "ge"
+        }
+      },
+      {
+        "id": "impulse",
+        "kind": "and"
+      },
+      {
+        "id": "out",
+        "kind": "outputs"
+      }
+    ],
+    "wires": [
+      {
+        "from": "atr.result",
+        "to": "atr-prev.value"
+      },
+      {
+        "from": "c.volume",
+        "to": "vol-median.value"
+      },
+      {
+        "from": "vol-median.result",
+        "to": "vol-median-prev.value"
+      },
+      {
+        "from": "c.open",
+        "to": "first-open.value"
+      },
+      {
+        "from": "p.candles",
+        "to": "first-open.length"
+      },
+      {
+        "from": "first-open.result",
+        "to": "move.a"
+      },
+      {
+        "from": "c.close",
+        "to": "move.b"
+      },
+      {
+        "from": "move.result",
+        "to": "move-atr.a"
+      },
+      {
+        "from": "atr-prev.result",
+        "to": "move-atr.b"
+      },
+      {
+        "from": "move-atr.result",
+        "to": "move-ok.a"
+      },
+      {
+        "from": "p.move",
+        "to": "move-ok.b"
+      },
+      {
+        "from": "c.volume",
+        "to": "vol-average.value"
+      },
+      {
+        "from": "p.candles",
+        "to": "vol-average.length"
+      },
+      {
+        "from": "vol-average.result",
+        "to": "vol-average-ratio.a"
+      },
+      {
+        "from": "vol-median-prev.result",
+        "to": "vol-average-ratio.b"
+      },
+      {
+        "from": "vol-average-ratio.result",
+        "to": "vol-ok.a"
+      },
+      {
+        "from": "p.volume",
+        "to": "vol-ok.b"
+      },
+      {
+        "from": "move-ok.result",
+        "to": "impulse.a"
+      },
+      {
+        "from": "vol-ok.result",
+        "to": "impulse.b"
+      },
+      {
+        "from": "impulse.result",
+        "to": "out.state"
+      }
+    ]
+  },
+  "layout": {}
+}

@@ -1,0 +1,197 @@
+using Grpc.Core;
+using Grpc.Net.Client;
+
+using ProfitFox.Application.Exceptions;
+using ProfitFox.Application.Queries.MarketData;
+using ProfitFox.Domain.Services.MarketData;
+using ProfitFox.Domain.ValueObjects.Execution;
+using ProfitFox.Domain.ValueObjects.MarketData;
+using ProfitFox.Infrastructure.Clients.MarketData;
+using ProfitFox.Infrastructure.Clients.MarketData.Protos;
+using ProfitFox.Tests.Integration.MarketData;
+
+using TimeRange = ProfitFox.Domain.ValueObjects.MarketData.TimeRange;
+
+namespace ProfitFox.Tests.Integration.Infrastructure.Clients.MarketData;
+
+/// <summary>
+///     Spec market-history over gRPC: the <c>History</c> streams of a fake market-data service in the test process.
+/// </summary>
+public sealed class GrpcHistorySourceTests
+{
+    private static readonly DateTimeOffset Start = FakeMarketData.CoveredFrom;
+
+    [Test]
+    public async Task Candles_and_their_coverage_come_from_the_stream()
+    {
+        await using MarketDataServer server = await MarketDataServer.Start();
+        var source = new GrpcHistorySource(server.Channel);
+
+        HistoryRead<HistoryCandle> read = await source.ReadCandles("btc", TimeSpan.FromHours(4), Start.AddDays(-1), Start.AddDays(1), CancellationToken.None);
+
+        Assert.That(read.Coverage, Is.EqualTo(new[] { new TimeRange(Start, Start.AddDays(1)) }));
+        Assert.That(read.Items, Has.Count.EqualTo(6));
+        Assert.That(read.Items[0], Is.EqualTo(new HistoryCandle(Start, "100.5", "101", "100", "100.25", "12.5", Turnover: null, BuyVolume: "6")));
+        CandleHistoryRequest request = server.Data.CandleRequests.Single();
+        Assert.That(request.Interval, Is.EqualTo(CandleInterval.FourHours));
+        Assert.That(request.InstrumentIds, Is.EqualTo(new[] { "btc" }));
+    }
+
+    /// <summary>
+    ///     Change add-ideas-and-market, task 2.2: the fake service gives any interval, built from its minutes.
+    /// </summary>
+    [TestCase(5, 288)]
+    [TestCase(15, 96)]
+    public async Task Candles_of_5m_and_15m_are_built_from_the_minutes(int minutes, int count)
+    {
+        await using MarketDataServer server = await MarketDataServer.Start();
+        var source = new GrpcHistorySource(server.Channel);
+
+        HistoryRead<HistoryCandle> read = await source.ReadCandles("btc", TimeSpan.FromMinutes(minutes), Start, Start.AddDays(1), CancellationToken.None);
+
+        Assert.That(read.Items, Has.Count.EqualTo(count));
+        Assert.That(read.Items.Select(candle => candle.OpenTime), Is.Ordered.And.Unique);
+        Assert.That(read.Items[1].OpenTime, Is.EqualTo(Start.AddMinutes(minutes)));
+        string volume = (12.5m * minutes).ToString(System.Globalization.CultureInfo.InvariantCulture);
+        Assert.That(read.Items[0], Is.EqualTo(new HistoryCandle(Start, "100.5", "101", "100", "100.25", volume, Turnover: null, BuyVolume: (6m * minutes).ToString(System.Globalization.CultureInfo.InvariantCulture))));
+        Assert.That(read.Items.Single(candle => candle.OpenTime == Start.AddHours(8)).HasTrades, Is.False, "the minutes of 08:00 have no trades");
+        Assert.That(server.Data.CandleRequests.Single().Interval, Is.EqualTo(minutes == 5 ? CandleInterval.FiveMinutes : CandleInterval.FifteenMinutes));
+    }
+
+    [Test]
+    public async Task Funding_payments_come_with_their_rate_as_text()
+    {
+        await using MarketDataServer server = await MarketDataServer.Start();
+        var source = new GrpcHistorySource(server.Channel);
+
+        HistoryRead<HistoryPayment> read = await source.ReadFunding("btc", Start, Start.AddDays(1), CancellationToken.None);
+
+        Assert.That(read.Items.Select(payment => payment.Time), Is.EqualTo(new[] { Start, Start.AddHours(8), Start.AddHours(16) }));
+        Assert.That(read.Items[0].ToFundingPayment(), Is.EqualTo(new FundingPayment(Start, 0.0001m)));
+    }
+
+    /// <summary>
+    ///     Change add-idea-score, task 5.1: the points of open interest come from <c>OpenInterestFeed.History</c> with their
+    ///     coverage, one request of the instrument and the window, the value read as a decimal.
+    /// </summary>
+    [Test]
+    public async Task Points_of_open_interest_come_from_the_stream_with_their_coverage()
+    {
+        await using MarketDataServer server = await MarketDataServer.Start();
+        var source = new GrpcHistorySource(server.Channel);
+
+        HistoryRead<OpenInterestPoint> read = await source.ReadOpenInterest("btc", Start.AddDays(-1), Start.AddHours(1), CancellationToken.None);
+
+        Assert.That(read.Coverage, Is.EqualTo(new[] { new TimeRange(Start, Start.AddHours(1)) }));
+        Assert.That(read.Items.Select(point => point.Time), Is.EqualTo(Enumerable.Range(0, 12).Select(step => Start.AddMinutes(5 * step))));
+        Assert.That(read.Items[0], Is.EqualTo(new OpenInterestPoint(Start, 24000m)));
+        OpenInterestHistoryRequest request = server.Data.InterestRequests.Single();
+        Assert.That((request.InstrumentIds.Single(), request.From.ToDateTimeOffset(), request.To.ToDateTimeOffset()), Is.EqualTo(("btc", Start.AddDays(-1), Start.AddHours(1))));
+    }
+
+    [Test]
+    public async Task A_stopping_service_is_a_dropped_read_of_open_interest()
+    {
+        await using MarketDataServer server = await MarketDataServer.Start();
+        server.Data.Failure = StatusCode.Unavailable;
+        var source = new GrpcHistorySource(server.Channel);
+
+        Assert.That(
+            () => source.ReadOpenInterest("btc", Start, Start.AddDays(1), CancellationToken.None),
+            Throws.InstanceOf<HistoryUnavailableException>().With.Property(nameof(HistoryUnavailableException.Dropped)).True);
+    }
+
+    [Test]
+    public async Task A_stopping_service_is_history_unavailable()
+    {
+        await using MarketDataServer server = await MarketDataServer.Start();
+        server.Data.Failure = StatusCode.Unavailable;
+        var source = new GrpcHistorySource(server.Channel);
+
+        Assert.That(
+            () => source.ReadCandles("btc", TimeSpan.FromHours(4), Start, Start.AddDays(1), CancellationToken.None),
+            Throws.InstanceOf<HistoryUnavailableException>());
+    }
+
+    /// <summary>
+    ///     Task 12.1: the service refuses a window of a day it does not hold yet with InvalidArgument; that is history
+    ///     unavailable too, not an error of the bench.
+    /// </summary>
+    [Test]
+    public async Task A_window_the_service_refuses_is_history_unavailable()
+    {
+        await using MarketDataServer server = await MarketDataServer.Start();
+        server.Data.Time = new FixedTime(Start.AddDays(1).AddHours(9));
+        var source = new GrpcHistorySource(server.Channel);
+
+        Assert.That(
+            () => source.ReadFunding("btc", Start, Start.AddDays(1).AddSeconds(1), CancellationToken.None),
+            Throws.InstanceOf<HistoryUnavailableException>().With.Message.Contains("must end at"));
+    }
+
+    [Test]
+    public void A_service_that_does_not_answer_is_history_unavailable()
+    {
+        using var channel = GrpcChannel.ForAddress("http://127.0.0.1:9");
+        var source = new GrpcHistorySource(channel);
+
+        Assert.That(
+            () => source.ReadCandles("btc", TimeSpan.FromHours(4), Start, Start.AddDays(1), CancellationToken.None),
+            Throws.InstanceOf<HistoryUnavailableException>().With.Property(nameof(HistoryUnavailableException.Dropped)).True);
+    }
+
+    /// <summary>
+    ///     Task 12.12: a read the service dropped or did not take may be repeated; a refusal may not.
+    /// </summary>
+    [TestCase(StatusCode.Unavailable, true)]
+    [TestCase(StatusCode.DeadlineExceeded, true)]
+    [TestCase(StatusCode.Internal, true)]
+    [TestCase(StatusCode.InvalidArgument, false)]
+    [TestCase(StatusCode.NotFound, false)]
+    public async Task A_failure_of_the_service_is_a_dropped_read_by_its_status(StatusCode status, bool dropped)
+    {
+        await using MarketDataServer server = await MarketDataServer.Start();
+        server.Data.Failure = status;
+        var source = new GrpcHistorySource(server.Channel);
+
+        Assert.That(
+            () => source.ReadCandles("btc", TimeSpan.FromHours(4), Start, Start.AddDays(1), CancellationToken.None),
+            Throws.InstanceOf<HistoryUnavailableException>().With.Property(nameof(HistoryUnavailableException.Dropped)).EqualTo(dropped));
+    }
+
+    [Test]
+    public async Task A_broken_stream_is_a_dropped_read()
+    {
+        await using MarketDataServer server = await MarketDataServer.Start();
+        server.Data.Drops = 1;
+        var source = new GrpcHistorySource(server.Channel);
+
+        Assert.That(
+            () => source.ReadFunding("btc", Start, Start.AddDays(1), CancellationToken.None),
+            Throws.InstanceOf<HistoryUnavailableException>().With.Property(nameof(HistoryUnavailableException.Dropped)).True);
+    }
+
+    [Test]
+    public async Task A_run_reads_only_the_windows_it_asks_for_and_the_same_read_gives_the_same_hash()
+    {
+        await using MarketDataServer server = await MarketDataServer.Start();
+        string[] hashes = new string[2];
+        IReadOnlyList<ClosedCandle> traded = [];
+        for (int run = 0; run < 2; run++)
+        {
+            using var hash = new HistoryHash();
+            var history = new MarketHistory(new GrpcHistorySource(server.Channel), Start.AddDays(30), hash, TimeProvider.System);
+            (_, traded) = await history.TradedCandles("btc", TimeSpan.FromHours(4), Start, Start.AddDays(2), CancellationToken.None);
+            await history.Candles("btc", TimeSpan.FromMinutes(1), Start.AddDays(1).AddHours(3), Start.AddDays(1).AddHours(9), CancellationToken.None);
+            hashes[run] = hash.Result();
+        }
+
+        Assert.That(traded, Has.Count.EqualTo(10), "the 08:00 candle of each day has no trades");
+        Assert.That(server.Data.CandleRequests.Take(2).Select(request => (request.Interval, request.From.ToDateTimeOffset(), request.To.ToDateTimeOffset())), Is.EqualTo(new[]
+        {
+            (CandleInterval.FourHours, Start, Start.AddDays(2)),
+            (CandleInterval.OneMinute, Start.AddDays(1).AddHours(3), Start.AddDays(1).AddHours(9))
+        }));
+        Assert.That(hashes[1], Is.EqualTo(hashes[0]));
+    }
+}
