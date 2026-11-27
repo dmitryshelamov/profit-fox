@@ -1416,6 +1416,19 @@ describe('the rows of the panels under the chart', () => {
 
 // Spec market-overview «Идеи пары» (task 14.5).
 describe('the ideas of a pair', () => {
+  // Change add-idea-score, task 3.5: spec idea-score «Балл в разделе «Идеи»» — the table of the ideas of a pair has the score.
+  it('shows the score of an idea with its sign and tone', async () => {
+    routes([idea({ id: 'long-1', score: -2 })]);
+    renderApp('/market/SOLUSDT');
+
+    const table = within(await screen.findByRole('table', { name: 'Идеи пары' }));
+    const heads = table.getAllByRole('columnheader').map((head) => head.textContent);
+    const cells = within(table.getByRole('row', { name: /long-1$/ })).getAllByRole('cell');
+    const score = cells[heads.findIndex((head) => head?.startsWith('Балл'))]!;
+
+    expect(within(score).getByText('-2')).toHaveClass('text-err');
+  });
+
   // Scenario «Открытая и закрытые».
   it('has a row for each idea, the open one with «открыта» and the time left', async () => {
     routes([

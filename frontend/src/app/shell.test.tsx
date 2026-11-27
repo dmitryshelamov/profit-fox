@@ -28,7 +28,7 @@ describe('the header', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   // Scenario «Текущий раздел».
-  it('has the five sections and marks «Прогоны» as current on the page of a run', async () => {
+  it('has the six sections and marks «Прогоны» as current on the page of a run', async () => {
     fakeApi({
       'GET /api/backtests': () => json([]),
       'GET /api/backtests/r5': () => json({ ...going, id: 'r5' }),
@@ -42,6 +42,7 @@ describe('the header', () => {
       'Прогоны',
       'Идеи',
       'Рынок',
+      'Скоринг',
     ]);
     await waitFor(() =>
       expect(
@@ -61,11 +62,15 @@ describe('the header', () => {
     ['/market', 'Рынок'],
     // Scenario «Страница пары».
     ['/market/SOLUSDT', 'Рынок'],
+    // Change add-idea-score, scenario «Страница «Скоринг»».
+    ['/scoring', 'Скоринг'],
   ])('marks the section of %s as current', async (path, section) => {
     fakeApi({
       ...baseRoutes(),
       'GET /api/strategies': () => json([]),
       'GET /api/backtests': () => json([]),
+      'GET /api/scoring/labels': () => json([]),
+      'GET /api/ideas/scores': () => json({ rows: [], filterGone: false }),
     });
     renderApp(path);
 

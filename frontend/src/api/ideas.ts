@@ -11,6 +11,8 @@ export type ScannerState = Schemas['ScannerStateResponse'];
 export type StrategyIdeas = Schemas['StrategyIdeasResponse'];
 export type SignalLabel = Schemas['SignalLabelResponse'];
 export type IdeaStrategyCounts = Schemas['IdeaStrategyCountsResponse'];
+export type IdeaScores = Schemas['IdeaScoresResponse'];
+export type IdeaScore = Schemas['IdeaScoreResponse'];
 
 /** The choices above a table of ideas. */
 export interface IdeaChoices {
@@ -26,6 +28,8 @@ export interface IdeaChoices {
   readonly state?: string;
   /** The kind of the pair of the idea (change add-instrument-kind-filter); every kind when not given. */
   readonly kind?: InstrumentKind;
+  /** Only ideas with a score of at least this (change add-idea-score); every score when not given. */
+  readonly minScore?: number;
 }
 
 function choicesQuery(choices: IdeaChoices) {
@@ -68,6 +72,15 @@ export async function countIdeasByStrategy(
     ...(filter === undefined ? {} : { filter }),
   };
   return unwrap(await api.GET('/api/ideas/strategies', { params: { query } }));
+}
+
+/**
+ * The outcomes of the closed ideas by score with the choices of the journal and the saved filter (change add-idea-score,
+ * spec idea-score «Итоги по баллу»): a row a score with at least one idea, from the highest.
+ */
+export async function scoreIdeas(choices: IdeaChoices = {}, filter?: string): Promise<IdeaScores> {
+  const query = { ...choicesQuery(choices), ...(filter === undefined ? {} : { filter }) };
+  return pageOf(await api.GET('/api/ideas/scores', { params: { query } }));
 }
 
 export async function getScannerState(): Promise<ScannerState> {

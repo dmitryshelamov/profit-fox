@@ -53,6 +53,7 @@ describe('the section «Идеи»', () => {
       '1h',
       'лонг',
       '—',
+      '0',
       '22.11 16:00',
       '236.10',
       '231.38',
@@ -82,7 +83,7 @@ describe('the section «Идеи»', () => {
     renderApp('/ideas');
 
     const row = await screen.findByRole('row', { name: 'SOLUSDT breakout-long 1h' });
-    expect(cells(row).slice(7, 9)).toEqual(['—', '—']);
+    expect(cells(row).slice(8, 10)).toEqual(['—', '—']);
   });
 
   // Scenario «Журнал».

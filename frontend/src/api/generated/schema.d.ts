@@ -180,6 +180,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ideas/scores": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["ScoreIdeas"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ideas/strategies": {
         parameters: {
             query?: never;
@@ -382,6 +398,38 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["PreviewStrategy"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/scoring/labels": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["ListScoringLabels"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/scoring/weights": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["SetLabelWeight"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -798,6 +846,24 @@ export interface components {
             /** Format: double */
             resultUsdt: null | number | string;
             excluded: null | string;
+            /** Format: int32 */
+            score: number | string;
+        };
+        IdeaScoreResponse: {
+            /** Format: int32 */
+            score: number | string;
+            /** Format: int32 */
+            ideas: number | string;
+            /** Format: double */
+            wins: number | string;
+            /** Format: double */
+            mean: number | string;
+            /** Format: double */
+            sum: number | string;
+        };
+        IdeaScoresResponse: {
+            rows: components["schemas"]["IdeaScoreResponse"][];
+            filterGone: boolean;
         };
         IdeaStrategyCountResponse: {
             strategy: string;
@@ -841,6 +907,13 @@ export interface components {
             symbol: string;
         };
         JsonElement: unknown;
+        LabelWeightRequest: {
+            text: null | string;
+            /** Format: double */
+            longWeight: null | number | string;
+            /** Format: double */
+            shortWeight: null | number | string;
+        };
         LiveCandleResponse: {
             /** Format: int64 */
             openTime: number | string;
@@ -1109,6 +1182,17 @@ export interface components {
             failure: null | string;
             /** Format: double */
             warmupLeftSeconds: null | number | string;
+        };
+        ScoringLabelResponse: {
+            text: string;
+            enabled: boolean;
+            timeframe: null | string;
+            signal: null | string;
+            /** Format: int32 */
+            longWeight: number | string;
+            /** Format: int32 */
+            shortWeight: number | string;
+            builtIn: boolean;
         };
         SetNumbersResponse: {
             /** Format: int32 */
@@ -1760,6 +1844,7 @@ export interface operations {
                 period?: number | string;
                 filter?: string;
                 kind?: string;
+                minScore?: string;
             };
             header?: never;
             path?: never;
@@ -1807,6 +1892,7 @@ export interface operations {
                 period?: number | string;
                 filter?: string;
                 kind?: string;
+                minScore?: string;
             };
             header?: never;
             path?: never;
@@ -1838,6 +1924,50 @@ export interface operations {
             };
         };
     };
+    ScoreIdeas: {
+        parameters: {
+            query?: {
+                search?: string;
+                strategy?: string;
+                timeframe?: string;
+                side?: string;
+                label?: string;
+                exitReason?: string;
+                period?: number | string;
+                filter?: string;
+                kind?: string;
+                minScore?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["IdeaScoresResponse"];
+                    "application/json": components["schemas"]["IdeaScoresResponse"];
+                    "text/json": components["schemas"]["IdeaScoresResponse"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ErrorResponse"];
+                    "application/json": components["schemas"]["ErrorResponse"];
+                    "text/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     CountIdeasByStrategy: {
         parameters: {
             query?: {
@@ -1853,6 +1983,7 @@ export interface operations {
                 period?: number | string;
                 filter?: string;
                 kind?: string;
+                minScore?: string;
             };
             header?: never;
             path?: never;
@@ -2393,6 +2524,78 @@ export interface operations {
                     "text/plain": components["schemas"]["ProblemDetails"];
                     "application/json": components["schemas"]["ProblemDetails"];
                     "text/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ListScoringLabels: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ScoringLabelResponse"][];
+                    "application/json": components["schemas"]["ScoringLabelResponse"][];
+                    "text/json": components["schemas"]["ScoringLabelResponse"][];
+                };
+            };
+        };
+    };
+    SetLabelWeight: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LabelWeightRequest"];
+                "text/json": components["schemas"]["LabelWeightRequest"];
+                "application/*+json": components["schemas"]["LabelWeightRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ScoringLabelResponse"];
+                    "application/json": components["schemas"]["ScoringLabelResponse"];
+                    "text/json": components["schemas"]["ScoringLabelResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ProblemDetails"];
+                    "application/json": components["schemas"]["ProblemDetails"];
+                    "text/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ErrorResponse"];
+                    "application/json": components["schemas"]["ErrorResponse"];
+                    "text/json": components["schemas"]["ErrorResponse"];
                 };
             };
         };

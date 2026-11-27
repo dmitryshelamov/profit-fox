@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 
 import type { IdeaChoices } from '@/api/ideas';
+import { scoreText } from '@/api/scoring';
 import { listSignals } from '@/api/signals';
 import { listStrategies } from '@/api/strategies';
 import { KindChoice } from '@/modules/instrument-kind/KindChoice';
@@ -9,6 +10,7 @@ import { SelectField } from '@/shared/ui/SelectField';
 import { TextField } from '@/shared/ui/TextField';
 
 import { exitWords } from './ideaColumns';
+import { minScores } from './useMinScore';
 
 /** The label of a burst of ideas: always among the labels to choose (spec idea-labels «Метки в списках идей»). */
 export const burstLabel = '⚡ всплеск';
@@ -31,7 +33,8 @@ export function useLabelChoices(): string[] {
 
 /**
  * The choices above a table of ideas: part of the symbol, timeframe, side, the kind of the pair (not for the ideas of a
- * pair: change add-instrument-kind-filter) and label; the open ideas add «только в плюсе»
+ * pair: change add-instrument-kind-filter), label and «Балл от» (not for the ideas of a pair: change add-idea-score); the
+ * open ideas add «только в плюсе»
  * and «только со стопом», the journal the reason of the exit and the period; the ideas of a pair have no search and add
  * the strategy and the state. «Открытые» and «Журнал» choose the strategy by the row of strategies (change
  * add-setup-strategies).
@@ -119,6 +122,25 @@ export function IdeaChoiceRow({
           </option>
         ))}
       </SelectField>
+      {kind !== 'pair' && (
+        <SelectField
+          aria-label="Балл от"
+          className="w-[130px]"
+          value={choices.minScore ?? ''}
+          onChange={(event) =>
+            set({
+              minScore: event.target.value === '' ? undefined : Number(event.target.value),
+            })
+          }
+        >
+          <option value="">Балл от: все</option>
+          {minScores.map((least) => (
+            <option key={least} value={least}>
+              Балл от: {scoreText(least)}
+            </option>
+          ))}
+        </SelectField>
+      )}
       {kind === 'open' && (
         <>
           <Check

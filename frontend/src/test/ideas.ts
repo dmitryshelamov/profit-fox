@@ -30,6 +30,7 @@ export function idea(overrides: Partial<Idea> = {}): Idea {
     result: null,
     resultUsdt: null,
     excluded: null,
+    score: 0,
     ...overrides,
   };
 }
