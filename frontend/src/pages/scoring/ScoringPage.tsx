@@ -2,6 +2,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { Link } from '@tanstack/react-router';
 import { useState } from 'react';
 
+import { ApiError } from '@/api/client';
 import { type IdeaChoices, type IdeaScore, scoreIdeas } from '@/api/ideas';
 import type { InstrumentKind } from '@/api/market';
 import {
@@ -102,7 +103,8 @@ function Weights() {
 }
 
 // A weight chosen shows at once; a refusal puts the weight before back and tells why in the row (scenario «Отказ
-// сервера»). A weight saved rereads the outcomes by score (scenario «Правка веса»).
+// сервера»), and a label gone since the table was read rereads it (task 8.7). A weight saved rereads the outcomes by
+// score (scenario «Правка веса»).
 function WeightRow({ row }: { readonly row: ScoringLabel }) {
   const client = useQueryClient();
   const [draft, setDraft] = useState<{ long: number; short: number } | null>(null);
@@ -125,9 +127,15 @@ function WeightRow({ row }: { readonly row: ScoringLabel }) {
         );
       }
     },
-    onError: () => {
+    onError: (failure) => {
       setDraft(null);
-      setError('Вес не сохранён: сервер не ответил. Стоит прежний вес.');
+      if (failure instanceof ApiError && failure.status === 404) {
+        // The label was renamed or its signal deleted while the page was open: the table is read again.
+        setError('Вес не сохранён: такой метки больше нет. Таблица перечитана.');
+        void client.invalidateQueries({ queryKey: labelsKey });
+      } else {
+        setError('Вес не сохранён: сервер не ответил. Стоит прежний вес.');
+      }
     },
   });
   const long = draft?.long ?? Number(row.longWeight);

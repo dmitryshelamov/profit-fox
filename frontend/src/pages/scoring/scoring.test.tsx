@@ -163,6 +163,27 @@ describe('the section «Скоринг»', () => {
     expect(within(row).getByRole('combobox', { name: 'Вес лонга ⚡ всплеск' })).toHaveValue('0');
   });
 
+  // Task 8.7 (review, P3): the label is gone — renamed or its signal deleted — while the page was open.
+  it('tells in the row that the label is gone and reads the labels again on a 404', async () => {
+    const requests = routes({
+      'PUT /api/scoring/weights': () => json({ title: 'Метки «фандинг» нет.' }, 404),
+    });
+    renderApp('/scoring');
+    await screen.findByRole('table', { name: 'Веса меток' });
+    const before = queriesOf(requests, '/api/scoring/labels').length;
+
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Вес шорта фандинг' }), '2');
+
+    const row = screen.getByRole('row', { name: 'фандинг' });
+    expect(await within(row).findByRole('alert')).toHaveTextContent(
+      'Вес не сохранён: такой метки больше нет. Таблица перечитана.',
+    );
+    await waitFor(() =>
+      expect(queriesOf(requests, '/api/scoring/labels').length).toBeGreaterThan(before),
+    );
+    expect(within(row).getByRole('combobox', { name: 'Вес шорта фандинг' })).toHaveValue('0');
+  });
+
   // Scenario «Меток нет».
   it('has only «⚡ всплеск» without labels and leads to «Сигналы»', async () => {
     routes({ 'GET /api/scoring/labels': () => json([burst]) });
