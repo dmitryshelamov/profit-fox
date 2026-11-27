@@ -6,7 +6,7 @@ using ProfitFox.Domain.Repositories;
 using ProfitFox.Domain.ValueObjects.Ideas;
 using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Ideas.Queries;
-using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Scoring.Queries;
+using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Scoring;
 
 namespace ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Ideas;
 
@@ -25,8 +25,8 @@ internal sealed class SignalLabelRepository(NpgsqlDataSource database) : ISignal
         return row?.ToDomain();
     }
 
-    // The weights of the label go to its new text in the same transaction (change add-idea-score, design.md, decision 1); a
-    // label turned off or on with the same text keeps them.
+    // The weights of the label go to its new text in the same transaction, and the ideas of both texts get their scores again
+    // (change add-idea-score, design.md, decisions 1 and 2); a label turned off or on with the same text keeps them.
     public async Task<bool> SetAsync(SignalLabel label, CancellationToken cancellationToken)
     {
         await using NpgsqlConnection connection = await database.OpenConnectionAsync(cancellationToken);
@@ -45,7 +45,7 @@ internal sealed class SignalLabelRepository(NpgsqlDataSource database) : ISignal
                 cancellationToken: cancellationToken));
             if (before is not null && before != label.Text)
             {
-                await connection.ExecuteAsync(new CommandDefinition(LabelWeightRepositoryQueries.Move, new { From = before, To = label.Text }, transaction, cancellationToken: cancellationToken));
+                await LabelWeightRepository.MoveAsync(connection, transaction, before, label.Text, cancellationToken);
             }
 
             await transaction.CommitAsync(cancellationToken);

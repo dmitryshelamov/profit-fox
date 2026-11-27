@@ -8,7 +8,7 @@ internal sealed class IdeaDb
     public Guid Id { get; init; }
 
     /// <summary>
-    ///     The score by the weights now; read by the lists only.
+    ///     The stored score, equal to the one by the weights now (design.md, decision 2).
     /// </summary>
     public int Score { get; init; }
 

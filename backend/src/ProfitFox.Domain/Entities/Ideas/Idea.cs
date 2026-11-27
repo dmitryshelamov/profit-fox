@@ -48,8 +48,9 @@ public sealed class Idea
 
     /// <summary>
     ///     The score of the idea (change add-idea-score, spec idea-score «Балл идеи»): the sum of the weights of its labels by
-    ///     its side, by the weights when the idea was read. The store counts it for the lists; it is never written and changes
-    ///     nothing of the idea, its plan or its outcome; 0 where it was not counted.
+    ///     its side, by the weights now. The store keeps it with the idea and counts it again when the weights of one of its
+    ///     labels change (design.md, decision 2); it changes nothing of the idea, its plan or its outcome, and saving the idea
+    ///     does not write it.
     /// </summary>
     public int Score { get; init; }
 
