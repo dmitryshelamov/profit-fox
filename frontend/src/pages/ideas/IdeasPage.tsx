@@ -232,6 +232,7 @@ function OpenIdeas({ filter, onGone, choices, page, onChoices, onPage, onOpen }:
           <PagedTable
             label="Открытые идеи"
             columns={openColumns}
+            dense
             rows={ideas.data.items}
             sort={list.sort}
             rowKey={(idea) => idea.id}
@@ -368,6 +369,7 @@ function Journal({ filter, onGone, choices, page, onChoices, onPage, onOpen }: L
           <PagedTable
             label="Закрытые идеи"
             columns={closedColumns}
+            dense
             rows={ideas.data.items}
             sort={list.sort}
             rowKey={(idea) => idea.id}

@@ -610,6 +610,7 @@ function ChartSection({
               <PagedTable
                 label="Идеи пары"
                 columns={pairColumns}
+                dense
                 rows={rows}
                 sort={list.sort}
                 selected={idea}

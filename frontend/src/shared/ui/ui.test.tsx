@@ -315,3 +315,39 @@ describe('the scroll of a paged table', () => {
     expect(scroll).toHaveBeenCalledTimes(1);
   });
 });
+
+// Change add-idea-score, task 3.6: a table wider than its frame scrolls inside it, and the tables of ideas sit closer.
+describe('the width of a paged table', () => {
+  const columns = [{ key: 'name', title: 'Имя', cell: (row: { id: string }) => row.id }];
+  const table = (dense: boolean) => (
+    <PagedTable
+      label="Строки"
+      columns={columns}
+      rows={[{ id: 'a' }]}
+      sort={{ field: 'name', descending: false }}
+      rowKey={(row) => row.id}
+      onSort={() => undefined}
+      dense={dense}
+    />
+  );
+
+  it('scrolls a wide table inside its frame', () => {
+    render(table(false));
+    expect(screen.getByRole('table', { name: 'Строки' }).parentElement).toHaveClass(
+      'overflow-x-auto',
+    );
+  });
+
+  it('sets the cells of a dense table 14 px apart and leaves the others at 20', () => {
+    const { unmount } = render(table(true));
+    expect(screen.getByRole('table', { name: 'Строки' }).parentElement).toHaveClass(
+      '[&_td]:pl-3.5',
+      '[&_th]:pl-3.5',
+    );
+    unmount();
+    render(table(false));
+    expect(screen.getByRole('table', { name: 'Строки' }).parentElement).not.toHaveClass(
+      '[&_td]:pl-3.5',
+    );
+  });
+});
