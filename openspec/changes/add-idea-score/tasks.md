@@ -14,10 +14,10 @@ typecheck`, `npm run lint`, `npm run format:check`, `npm run build`. Кажда�
 
 ## 1. База и замеры
 
-- [ ] 1.1 Снять базу до правок: `dotnet build ProfitFox.slnx --configuration Release`, тесты бэкенда и фронтенда,
+- [x] 1.1 Снять базу до правок: `dotnet build ProfitFox.slnx --configuration Release`, тесты бэкенда и фронтенда,
   SHA-256 `Fixtures/EngineVersions.json` и `/openapi/v1.json`. Проверить: числа тестов, предупреждений и оба хэша
   записаны в разделе «База» в конце этого файла.
-- [ ] 1.2 Узнать значение стороны идеи в `ideas.side` (`IdeaDbConverter`) и записать в «Замеры»; выражение балла
+- [x] 1.2 Узнать значение стороны идеи в `ideas.side` (`IdeaDbConverter`) и записать в «Замеры»; выражение балла
   (решение 2) пишется с ним.
 - [ ] 1.3 Объём покупок вживую и в истории (риск 1 `design.md`): подписаться на ленту минут сервиса данных (адрес —
   настройка dev-стенда) на 15 минут и посчитать долю минут со сделками, у которых есть `buy_volume`; прочитать историю
@@ -117,6 +117,23 @@ typecheck`, `npm run lint`, `npm run format:check`, `npm run build`. Кажда�
 
 ## База
 
+Снята 2026-11-27 в облачной сессии на `dc3e3fb` (.NET SDK 10.0.115, Node 22.23.5, Postgres 17 в Docker для
+интеграционных тестов).
+
+- `dotnet build ProfitFox.slnx --configuration Release`: 0 предупреждений, 0 ошибок.
+- Тесты бэкенда: `ProfitFox.Tests.Unit` — 887 прошло из 887; `ProfitFox.Tests.Integration` — 460 прошло из 460.
+- Тесты фронтенда: 35 файлов, 453 теста прошло; `typecheck`, `lint`, `format:check` чистые; `build` собран (одно
+  прежнее замечание Vite о куске больше 500 kB).
+- SHA-256 `backend/tests/ProfitFox.Tests.Integration/Fixtures/EngineVersions.json`:
+  `8531a12c149c44158e22d664c7feb4c7592ada433df3a5981c6274b8d72f8fe2`.
+- SHA-256 `/openapi/v1.json` (API в `Development` на локальной пустой базе):
+  `005aba9aef84072d797a2f3fadd9754038301a17e0894f620135fe79513adc1f`. `openapi-typescript` по нему даёт файл,
+  побайтно равный `frontend/src/api/generated/schema.d.ts`.
+
 ## Замеры
+
+- 1.2. Сторона идеи в `ideas.side` — `'long'` или `'short'` (`IdeaDbConverter.Parameters`: `idea.Side ==
+  EntrySide.Long ? "long" : "short"`; `ToDomain` читает `"long"` как лонг, остальное — шорт). Выражение балла
+  сравнивает с `'long'`, как в решении 2.
 
 ## Открыто после применения
