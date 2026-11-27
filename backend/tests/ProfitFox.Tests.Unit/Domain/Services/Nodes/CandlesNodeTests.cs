@@ -43,6 +43,6 @@ public sealed class CandlesNodeTests
         string json = NodeGraphs.Graph("duration", "n.duration", $$"""{ "id": "n", "kind": "candles", "inputs": { "count": {{count}} } }""");
         var run = new GraphRun(Execution.History.Graph(json));
         var candle = new ClosedCandle(Start, Start + timeframe, 1, 1, 1, 1, 1);
-        return run.Step(candle, lastFunding: null)[0].Duration;
+        return run.Step(candle, facts: null)[0].Duration;
     }
 }

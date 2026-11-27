@@ -17,7 +17,7 @@ public sealed class NodeCatalogTests
 
     private static readonly string[] SignalKinds =
         [
-            "parameters", "candle", "funding-rate", "pair-candle", "compare", "previous", "and", "or", "not", "first-time", "add", "subtract", "multiply",
+            "parameters", "candle", "funding-rate", "open-interest", "pair-candle", "compare", "previous", "and", "or", "not", "first-time", "add", "subtract", "multiply",
             "divide", "min", "max", "select", "window", "percentile", "hold", "atr", "rsi", "zones", "candles", "is-true", "outputs"
         ];
 
@@ -114,6 +114,7 @@ public sealed class NodeCatalogTests
             "parameters: -> threshold:number",
             "candle: -> open:number high:number low:number close:number volume:number",
             "funding-rate: -> value:number",
+            "open-interest: -> value:number",
             "pair-candle: -> open:number high:number low:number close:number volume:number",
             "compare: a:number b:number -> result:boolean",
             "previous: value:number -> result:number",

@@ -81,7 +81,7 @@ public sealed class IsTrueNodeTests
 
         foreach (ClosedCandle candle in History.Closes(1, 2, 1, 1, 3))
         {
-            bool? atClose = run.Step(candle, lastFunding: null)[0].Boolean;
+            bool? atClose = run.Step(candle, facts: null)[0].Boolean;
             bool? afterFill = run.Again(PositionState.Closed, candle.CloseTime.AddMinutes(1))[0].Boolean;
 
             Assert.That(afterFill, Is.EqualTo(atClose), candle.OpenTime.ToString("O"));

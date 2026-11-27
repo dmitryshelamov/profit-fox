@@ -149,7 +149,7 @@ public sealed class PositionGraphTests
             """;
         var run = new GraphRun(History.Graph(json));
 
-        PinValue x = run.Step(History.Candle(0, 1), lastFunding: null)[0];
+        PinValue x = run.Step(History.Candle(0, 1), facts: null)[0];
 
         Assert.That(x, Is.EqualTo(PinValue.FromBoolean(true)));
     }

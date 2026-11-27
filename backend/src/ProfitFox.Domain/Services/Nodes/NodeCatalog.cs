@@ -21,6 +21,7 @@ public static class NodeCatalog
     public const string Parameters = "parameters";
     public const string Candle = "candle";
     public const string FundingRate = "funding-rate";
+    public const string OpenInterest = "open-interest";
     public const string PairCandle = "pair-candle";
 
     /// <summary>
@@ -167,6 +168,7 @@ public static class NodeCatalog
                 [],
                 _ => new CandleNode()),
             new NodeKind(FundingRate, [], [new PinDeclaration("value", PinType.Number)], [], _ => new FundingRateNode()),
+            new NodeKind(OpenInterest, [], [new PinDeclaration("value", PinType.Number)], [], _ => new OpenInterestNode()),
             new NodeKind(
                 PairCandle,
                 [],

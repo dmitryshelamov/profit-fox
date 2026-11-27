@@ -67,7 +67,7 @@ public sealed class PositionNodeTests
         var state = new PositionState(quantity, Invested: 200m, AveragePrice: 200m / quantity, LastEntryPrice: 99m, LastEntryTime: Monday.AddHours(12).AddMinutes(7));
         var run = new GraphRun(History.Graph(StateGraph()));
 
-        PinValue[] outputs = [.. run.Step(History.Candle(3, 100), lastFunding: null, state)];
+        PinValue[] outputs = [.. run.Step(History.Candle(3, 100), facts: null, state)];
 
         Assert.That(outputs[0], Is.EqualTo(PinValue.FromBoolean(true)));
         Assert.That(outputs[1].Number, Is.EqualTo(quantity));
@@ -83,7 +83,7 @@ public sealed class PositionNodeTests
         var run = new GraphRun(History.Graph(StateGraph()));
         ClosedCandle candle = History.Candle(3, 100);
 
-        PinValue since = run.Step(candle, lastFunding: null, state)[5];
+        PinValue since = run.Step(candle, facts: null, state)[5];
 
         Assert.That(candle.CloseTime, Is.EqualTo(Monday.AddHours(16)));
         Assert.That(since.Duration, Is.EqualTo(new TimeSpan(3, 53, 0)));
@@ -94,7 +94,7 @@ public sealed class PositionNodeTests
     {
         var run = new GraphRun(History.Graph(StateGraph()));
 
-        PinValue[] outputs = [.. run.Step(History.Candle(0, 100), lastFunding: null, PositionState.Closed)];
+        PinValue[] outputs = [.. run.Step(History.Candle(0, 100), facts: null, PositionState.Closed)];
 
         Assert.That(outputs[0], Is.EqualTo(PinValue.FromBoolean(false)));
         Assert.That(outputs[1].Number, Is.Zero);
@@ -102,14 +102,14 @@ public sealed class PositionNodeTests
         Assert.That(outputs[3].IsMissing, Is.True);
         Assert.That(outputs[4].Number, Is.Zero);
         Assert.That(outputs[5].IsMissing, Is.True);
-        Assert.That(run.Step(History.Candle(1, 100), lastFunding: null)[0], Is.EqualTo(PinValue.FromBoolean(false)), "a step without a state is a closed position");
+        Assert.That(run.Step(History.Candle(1, 100), facts: null)[0], Is.EqualTo(PinValue.FromBoolean(false)), "a step without a state is a closed position");
     }
 
     [Test]
     public void The_computation_again_sees_the_new_state_at_the_moment_of_the_fill()
     {
         var run = new GraphRun(History.Graph(StateGraph()));
-        run.Step(History.Candle(3, 100), lastFunding: null, PositionState.Closed);
+        run.Step(History.Candle(3, 100), facts: null, PositionState.Closed);
         var bought = new PositionState(1m, Invested: 100m, AveragePrice: 100m, LastEntryPrice: 100m, LastEntryTime: Monday.AddHours(16).AddMinutes(3));
 
         PinValue[] outputs = [.. run.Again(bought, Monday.AddHours(16).AddMinutes(5))];
@@ -123,12 +123,12 @@ public sealed class PositionNodeTests
     {
         string json = History.WithOutput("number", "prev.result", """{ "id": "c", "kind": "candle" }, { "id": "prev", "kind": "previous" }""", """{ "from": "c.close", "to": "prev.value" }""");
         var run = new GraphRun(History.Graph(json));
-        run.Step(History.Candle(0, 1), lastFunding: null);
-        Assert.That(run.Step(History.Candle(1, 2), lastFunding: null)[0].Number, Is.EqualTo(1m));
+        run.Step(History.Candle(0, 1), facts: null);
+        Assert.That(run.Step(History.Candle(1, 2), facts: null)[0].Number, Is.EqualTo(1m));
 
         Assert.That(run.Again(PositionState.Closed, History.Candle(1, 2).CloseTime.AddMinutes(7))[0].Number, Is.EqualTo(1m), "still the close of the first candle");
         Assert.That(run.Again(PositionState.Closed, History.Candle(1, 2).CloseTime.AddMinutes(9))[0].Number, Is.EqualTo(1m));
-        Assert.That(run.Step(History.Candle(2, 3), lastFunding: null)[0].Number, Is.EqualTo(2m), "the close of the second candle, however many computations again");
+        Assert.That(run.Step(History.Candle(2, 3), facts: null)[0].Number, Is.EqualTo(2m), "the close of the second candle, however many computations again");
     }
 
     [Test]
@@ -141,16 +141,16 @@ public sealed class PositionNodeTests
             $$"""{{OrdersWire}}, { "from": "position.open", "to": "closed.value" }, { "from": "closed.result", "to": "first.value" }""");
         var run = new GraphRun(History.Graph(json));
         var open = new PositionState(1m, Invested: 100m, AveragePrice: 100m, LastEntryPrice: 100m, LastEntryTime: Monday);
-        run.Step(History.Candle(0, 1), lastFunding: null, open);
-        Assert.That(run.Step(History.Candle(1, 1), lastFunding: null, open)[0].Happened, Is.False);
+        run.Step(History.Candle(0, 1), facts: null, open);
+        Assert.That(run.Step(History.Candle(1, 1), facts: null, open)[0].Happened, Is.False);
 
         Assert.That(run.Again(PositionState.Closed, History.Candle(1, 1).CloseTime.AddMinutes(7))[0].Happened, Is.True, "closed now, open at the last close");
         Assert.That(run.Again(PositionState.Closed, History.Candle(1, 1).CloseTime.AddMinutes(8))[0].Happened, Is.True, "the memory did not move");
         Assert.That(
-            run.Step(History.Candle(2, 1), lastFunding: null, PositionState.Closed)[0].Happened,
+            run.Step(History.Candle(2, 1), facts: null, PositionState.Closed)[0].Happened,
             Is.True,
             "the close compares with the close before it, not with the computation again");
-        Assert.That(run.Step(History.Candle(3, 1), lastFunding: null, PositionState.Closed)[0].Happened, Is.False);
+        Assert.That(run.Step(History.Candle(3, 1), facts: null, PositionState.Closed)[0].Happened, Is.False);
     }
 
     // The outputs of the state of the position: open, quantity, averagePrice, lastEntryPrice, invested, sinceLastEntry.

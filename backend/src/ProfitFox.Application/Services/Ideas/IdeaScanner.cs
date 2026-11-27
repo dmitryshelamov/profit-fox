@@ -569,7 +569,7 @@ public sealed class IdeaScanner
             warmup.Run.Pairs[warmup.Symbol] = state;
             try
             {
-                foreach ((ClosedCandle candle, FundingPayment? funding, IReadOnlyDictionary<string, ClosedCandle>? pairs) in PairCandles.WithPairs(
+                foreach ((ClosedCandle candle, CandleFacts funding, IReadOnlyDictionary<string, ClosedCandle>? pairs) in PairCandles.WithPairs(
                              warmup.Run.Timeframe,
                              warmup.Candles,
                              warmup.Funding,
@@ -720,7 +720,7 @@ public sealed class IdeaScanner
     }
 
     // A strategy is stepped for its order; a label keeps the value of its signal at the close.
-    private static StrategyStep? Step(Run run, string symbol, ClosedCandle candle, FundingPayment? funding, IReadOnlyDictionary<string, ClosedCandle>? pairs)
+    private static StrategyStep? Step(Run run, string symbol, ClosedCandle candle, CandleFacts funding, IReadOnlyDictionary<string, ClosedCandle>? pairs)
     {
         if (run.Executor is { } executor)
         {

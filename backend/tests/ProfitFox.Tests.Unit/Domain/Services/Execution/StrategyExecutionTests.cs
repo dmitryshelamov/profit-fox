@@ -249,9 +249,9 @@ public sealed class StrategyExecutionTests
     public void Candles_of_a_pair_go_in_the_order_of_their_close()
     {
         var executor = new StrategyExecutor(Strategy(Graphs.H0001Strategy));
-        executor.Step("BTCUSDT", History.Candle(1, 1), lastFunding: null);
+        executor.Step("BTCUSDT", History.Candle(1, 1), facts: null);
 
-        Assert.That(() => executor.Step("BTCUSDT", History.Candle(0, 1), lastFunding: null), Throws.ArgumentException);
+        Assert.That(() => executor.Step("BTCUSDT", History.Candle(0, 1), facts: null), Throws.ArgumentException);
     }
 
     // Two enter nodes on the same event: the close first above 0.02.
@@ -295,6 +295,6 @@ public sealed class StrategyExecutionTests
     private static List<StrategyStep> Steps(string json, params decimal[] closes)
     {
         var executor = new StrategyExecutor(Strategy(json));
-        return [.. History.Closes(closes).Select(candle => executor.Step("BTCUSDT", candle, lastFunding: null))];
+        return [.. History.Closes(closes).Select(candle => executor.Step("BTCUSDT", candle, facts: null))];
     }
 }

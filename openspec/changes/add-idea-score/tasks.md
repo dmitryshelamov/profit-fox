@@ -65,14 +65,14 @@ typecheck`, `npm run lint`, `npm run format:check`, `npm run build`. Кажда�
 
 ## 4. Узел «OI» в движке
 
-- [ ] 4.1 `CandleFacts` вместо `FundingPayment? lastFunding` в подписях `Step` и в `NodeContext` (решение 5);
+- [x] 4.1 `CandleFacts` вместо `FundingPayment? lastFunding` в подписях `Step` и в `NodeContext` (решение 5);
   `GraphRun.Again()` повторяет факты. Проверить: все прежние тесты зелёные без правки ожиданий.
-- [ ] 4.2 Вид `open-interest` в `NodeCatalog`, `OpenInterestNode`, заголовок «OI» в `NodeTitles`. Проверить
+- [x] 4.2 Вид `open-interest` в `NodeCatalog`, `OpenInterestNode`, заголовок «OI» в `NodeTitles`. Проверить
   юнит-тестами сценарии spec `strategy-execution` «Открытый интерес», ожидания `NodeCatalogTests` и `NodesTests` с
   новым видом, вид в `EveryKind()` теста без заглядывания вперёд.
-- [ ] 4.3 `PairCandles.Closed` выравнивает точки OI: последняя строго раньше `CloseTime`. Проверить тестом сценарий
+- [x] 4.3 `PairCandles.Closed` выравнивает точки OI: последняя строго раньше `CloseTime`. Проверить тестом сценарий
   «Точка OI в момент закрытия» и тестом, что интервал без точки берёт точку прошлого интервала.
-- [ ] 4.4 `GraphNeeds.OpenInterest` (решение 6) по графу после раскрытия сигналов. Проверить юнит-тестами: граф без
+- [x] 4.4 `GraphNeeds.OpenInterest` (решение 6) по графу после раскрытия сигналов. Проверить юнит-тестами: граф без
   узла, с узлом, с узлом только внутри сигнала.
 
 ## 5. OI в прогоне, предпросмотре и сканере

@@ -46,7 +46,21 @@ public sealed class NodesTests
         NodeKindResponse[] kinds = await Catalog();
 
         Assert.That(kinds.Select(kind => kind.Kind), Has.None.AnyOf("enter", "position", "market-order", "limit-order", "close-position", "stop-loss", "take-profit", "close-after"));
-        Assert.That(kinds, Has.Length.EqualTo(26));
+        Assert.That(kinds, Has.Length.EqualTo(27));
+    }
+
+    /// <summary>
+    ///     Change add-idea-score, task 4.2: the node «OI» is a node of the data with one number <c>value</c>, in the catalogs of
+    ///     a signal and of a strategy.
+    /// </summary>
+    [Test]
+    public async Task The_open_interest_is_a_node_of_the_data_with_its_value()
+    {
+        NodeKindResponse kind = (await Catalog()).Single(kind => kind.Kind == "open-interest");
+
+        Assert.That((kind.Title, kind.Group), Is.EqualTo(("OI", "Данные")));
+        Assert.That(kind.Inputs, Is.Empty);
+        Assert.That(kind.Outputs, Is.EqualTo(new[] { new PinResponse("value", "number") }));
     }
 
     [Test]
@@ -153,7 +167,7 @@ public sealed class NodesTests
             kinds.Select(kind => kind.Kind),
             Is.EqualTo(new[]
             {
-                "parameters", "candle", "funding-rate", "pair-candle", "compare", "previous", "and", "or", "not", "first-time", "add", "subtract", "multiply",
+                "parameters", "candle", "funding-rate", "open-interest", "pair-candle", "compare", "previous", "and", "or", "not", "first-time", "add", "subtract", "multiply",
                 "divide", "min", "max", "select", "window", "percentile", "hold", "atr", "rsi", "zones", "candles", "is-true", "outputs"
             }));
     }

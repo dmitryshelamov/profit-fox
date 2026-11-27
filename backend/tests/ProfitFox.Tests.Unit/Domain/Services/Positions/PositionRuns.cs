@@ -42,7 +42,7 @@ internal static class PositionRuns
         var run = new PositionRun(Strategy(json), path, costs ?? Free, Paths.Start, end);
         for (int hour = 0; hour <= hours; hour++)
         {
-            run.Step(Hour(hour, close?.Invoke(hour) ?? 100), lastFunding: null);
+            run.Step(Hour(hour, close?.Invoke(hour) ?? 100), facts: null);
         }
 
         return run.Finish(end);

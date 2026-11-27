@@ -37,10 +37,10 @@ public sealed class ExecutionTests
         var btc = new GraphRun(History.Graph(json));
         var eth = new GraphRun(History.Graph(json));
 
-        btc.Step(History.Candle(0, 100), lastFunding: null);
-        eth.Step(History.Candle(0, 7), lastFunding: null);
-        btc.Step(History.Candle(1, 101), lastFunding: null);
-        PinValue ethPrevious = eth.Step(History.Candle(1, 8), lastFunding: null)[0];
+        btc.Step(History.Candle(0, 100), facts: null);
+        eth.Step(History.Candle(0, 7), facts: null);
+        btc.Step(History.Candle(1, 101), facts: null);
+        PinValue ethPrevious = eth.Step(History.Candle(1, 8), facts: null)[0];
 
         Assert.That(ethPrevious.Number, Is.EqualTo(7m));
     }
@@ -78,9 +78,9 @@ public sealed class ExecutionTests
     public void Candles_of_a_pair_go_in_the_order_of_their_close()
     {
         var executor = new SignalExecutor(H0001);
-        executor.Step("BTCUSDT", History.Candle(1, 1), lastFunding: null);
+        executor.Step("BTCUSDT", History.Candle(1, 1), facts: null);
 
-        Assert.That(() => executor.Step("BTCUSDT", History.Candle(0, 1), lastFunding: null), Throws.ArgumentException);
+        Assert.That(() => executor.Step("BTCUSDT", History.Candle(0, 1), facts: null), Throws.ArgumentException);
     }
 
     [Test]

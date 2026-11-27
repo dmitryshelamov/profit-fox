@@ -25,11 +25,11 @@ public sealed class SignalExecutor
     ///     value turns true after false or missing (spec signal-preview «Предпросмотр сигнала-состояния»). Candles of one pair
     ///     go in the order of their close; pairs may be mixed in any order.
     /// </summary>
-    public SignalEvent? Step(string instrument, ClosedCandle candle, FundingPayment? lastFunding, IReadOnlyDictionary<string, ClosedCandle>? pairs = null)
+    public SignalEvent? Step(string instrument, ClosedCandle candle, CandleFacts facts, IReadOnlyDictionary<string, ClosedCandle>? pairs = null)
     {
         PairRun run = Run(instrument);
         bool? before = run.Last;
-        bool? value = Advance(run, candle, lastFunding, pairs);
+        bool? value = Advance(run, candle, facts, pairs);
         bool happened = _state ? value == true && before != true : value == true;
         return happened ? new SignalEvent(instrument, candle.CloseTime) : null;
     }
@@ -38,9 +38,9 @@ public sealed class SignalExecutor
     ///     The value of the output of the pair at the close of <paramref name="candle" /> (spec strategy-execution «Выход
     ///     сигнала-состояния»): true, false or missing for a signal-state, whether the event happened for a signal of an event.
     /// </summary>
-    public bool? Value(string instrument, ClosedCandle candle, FundingPayment? lastFunding, IReadOnlyDictionary<string, ClosedCandle>? pairs = null)
+    public bool? Value(string instrument, ClosedCandle candle, CandleFacts facts, IReadOnlyDictionary<string, ClosedCandle>? pairs = null)
     {
-        return Advance(Run(instrument), candle, lastFunding, pairs);
+        return Advance(Run(instrument), candle, facts, pairs);
     }
 
     /// <summary>
@@ -62,9 +62,9 @@ public sealed class SignalExecutor
         return run;
     }
 
-    private static bool? Advance(PairRun run, ClosedCandle candle, FundingPayment? lastFunding, IReadOnlyDictionary<string, ClosedCandle>? pairs)
+    private static bool? Advance(PairRun run, ClosedCandle candle, CandleFacts facts, IReadOnlyDictionary<string, ClosedCandle>? pairs)
     {
-        PinValue output = run.Graph.Step(candle, lastFunding, position: null, pairs)[0];
+        PinValue output = run.Graph.Step(candle, facts, position: null, pairs)[0];
         run.Last = output.Boolean;
         return output.Boolean;
     }

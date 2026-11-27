@@ -30,7 +30,7 @@ public sealed class LadderTests
         var run = new PositionRun(PositionRuns.Strategy(Graphs.Ladder), path, Free, Paths.Start);
 
         // 12:00: the first computation, with no position, places the market buy of 100 USDT; it fills at the open of 12:00.
-        run.Step(Hour(0), lastFunding: null);
+        run.Step(Hour(0), facts: null);
         Assert.That(run.Standing.Select(Describe), Is.EqualTo(new[] { "entry buy market 100" }));
         run.Advance(Paths.At(1));
         Assert.That(run.Standing.Select(Describe), Is.EqualTo(new[] { "sell sell 101 1 coins", "buy buy 99 100" }), "1 coin at 100: sell at 101, buy at 99");

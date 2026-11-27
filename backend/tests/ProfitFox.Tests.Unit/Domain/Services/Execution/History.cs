@@ -44,6 +44,16 @@ internal static class History
     }
 
     /// <summary>
+    ///     The declared outputs of the graph at each candle; <paramref name="facts" /> gives the last payment and the last point
+    ///     of open interest before a close (change add-idea-score).
+    /// </summary>
+    public static List<PinValue[]> Run(string json, IEnumerable<ClosedCandle> candles, Func<ClosedCandle, CandleFacts> facts)
+    {
+        var run = new GraphRun(Graph(json));
+        return [.. candles.Select(candle => run.Step(candle, facts(candle)).ToArray())];
+    }
+
+    /// <summary>
     ///     A graph with one number or boolean output <c>x</c> taken from <paramref name="from" />.
     /// </summary>
     public static string WithOutput(string type, string from, string nodes, string wires = "")

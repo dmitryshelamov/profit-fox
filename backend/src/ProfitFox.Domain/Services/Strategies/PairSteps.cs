@@ -45,9 +45,9 @@ public sealed class PairSteps
     {
         var executor = new StrategyExecutor(strategy);
         List<StrategyStep> steps = [];
-        foreach ((ClosedCandle closed, FundingPayment? lastFunding, IReadOnlyDictionary<string, ClosedCandle>? pairs) in PairCandles.WithPairs(timeframe, candles, funding, named))
+        foreach ((ClosedCandle closed, CandleFacts facts, IReadOnlyDictionary<string, ClosedCandle>? pairs) in PairCandles.WithPairs(timeframe, candles, funding, named))
         {
-            steps.Add(executor.Step(symbol, closed, lastFunding, pairs));
+            steps.Add(executor.Step(symbol, closed, facts, pairs));
         }
 
         return new PairSteps(steps, executor.BeforeCandles(DateTimeOffset.UnixEpoch), strategy.ByPlan);

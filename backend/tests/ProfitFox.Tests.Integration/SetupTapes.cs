@@ -107,7 +107,7 @@ internal static class SetupTapes
     public static List<bool?> States(string signal, IEnumerable<ClosedCandle> candles, params (string Name, decimal Value)[] parameters)
     {
         var executor = new SignalExecutor(Signal(signal, parameters));
-        return [.. candles.Select(candle => executor.Value("BTCUSDT", candle, lastFunding: null))];
+        return [.. candles.Select(candle => executor.Value("BTCUSDT", candle, facts: null))];
     }
 
     public static Signal Signal(string name, params (string Name, decimal Value)[] parameters)
@@ -138,7 +138,7 @@ internal static class SetupTapes
                         }
                         """;
         var run = new GraphRun(StrategyGraph.Read(json).Value!);
-        return [.. candles.Select(candle => run.Step(candle, lastFunding: null)[0].Number)];
+        return [.. candles.Select(candle => run.Step(candle, facts: null)[0].Number)];
     }
 
     /// <summary>

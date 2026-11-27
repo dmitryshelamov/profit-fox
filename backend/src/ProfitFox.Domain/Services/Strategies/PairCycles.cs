@@ -46,7 +46,7 @@ public static class PairCycles
         IReadOnlyDictionary<string, IReadOnlyList<HistoryCandle>>? named = null)
     {
         var run = new PositionRun(strategy, path, costs, from, end, cancellationToken);
-        foreach ((ClosedCandle candle, FundingPayment? lastFunding, IReadOnlyDictionary<string, ClosedCandle>? pairs) in PairCandles.WithPairs(timeframe, candles, funding, named))
+        foreach ((ClosedCandle candle, CandleFacts facts, IReadOnlyDictionary<string, ClosedCandle>? pairs) in PairCandles.WithPairs(timeframe, candles, funding, named))
         {
             if (candle.CloseTime > end)
             {
@@ -54,7 +54,7 @@ public static class PairCycles
             }
 
             cancellationToken.ThrowIfCancellationRequested();
-            run.Step(candle, lastFunding, pairs);
+            run.Step(candle, facts, pairs);
         }
 
         return run.Finish(end);
