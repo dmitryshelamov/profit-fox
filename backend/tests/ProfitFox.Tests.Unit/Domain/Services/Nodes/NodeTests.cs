@@ -30,6 +30,28 @@ public sealed class NodeTests
                                             { "from": "rate.value", "to": "high.a" }, { "from": "p.threshold", "to": "high.b" }
                                             """;
 
+    /// <summary>
+    ///     Change add-idea-score, task 6.3: spec strategy-execution «Данные свечи» — <c>buyVolume</c> of a candle of 5m built of
+    ///     five minutes with buy volumes 1, 2, 0, 3 and 4 is 10; when one of them is not known it is missing, and the volume and
+    ///     the prices are there.
+    /// </summary>
+    [TestCase(10.0, false)]
+    [TestCase(null, true)]
+    public void The_candle_node_gives_the_buy_volume_of_the_candle(double? bought, bool missing)
+    {
+        const string both = """{ "id": "c", "kind": "candle" }""";
+        DateTimeOffset open = History.Start;
+        var candle = new ClosedCandle(open, open.AddMinutes(5), 100, 102, 99, 101.5m, 25, bought is { } sum ? (decimal)sum : null);
+
+        List<PinValue[]> buy = History.Run(History.WithOutput("number", "c.buyVolume", both), [candle]);
+        List<PinValue[]> volume = History.Run(History.WithOutput("number", "c.volume", both), [candle]);
+        List<PinValue[]> close = History.Run(History.WithOutput("number", "c.close", both), [candle]);
+
+        Assert.That(buy[0][0].IsMissing, Is.EqualTo(missing));
+        Assert.That(buy[0][0].Number, Is.EqualTo(missing ? null : (decimal?)10m));
+        Assert.That((volume[0][0].Number, close[0][0].Number), Is.EqualTo(((decimal?)25m, (decimal?)101.5m)));
+    }
+
     [Test]
     public void The_candle_node_gives_the_close_of_the_candle()
     {

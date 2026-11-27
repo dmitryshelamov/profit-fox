@@ -375,6 +375,39 @@ public sealed class MarketBookTests
         Assert.That(book.Snapshot("SOLUSDT"), Is.Null, "the snapshot needs a minute");
     }
 
+    /// <summary>
+    ///     Change add-idea-score, task 6.2: spec market-live-feed «Объём покупок свечи из минут» — the candle of 5m sums the buy
+    ///     volumes of its minutes; one minute with trades without it leaves the candle without one, and the candle is built.
+    /// </summary>
+    [TestCase(false, 10)]
+    [TestCase(true, null)]
+    public void The_buy_volume_of_a_candle_is_the_sum_of_its_minutes(bool missing, int? expected)
+    {
+        MarketBook book = Book(Ten.AddMinutes(6));
+        decimal[] bought = [1, 2, 0, 3, 4];
+        for (int minute = 0; minute < 5; minute++)
+        {
+            decimal? buyVolume = missing && minute == 3 ? null : bought[minute];
+            book.Apply(Minute("SOLUSDT", Ten.AddMinutes(minute), 100, 101, volume: 5) with { BuyVolume = buyVolume });
+        }
+
+        book.Apply(Minute("SOLUSDT", Ten.AddMinutes(5), 101, 101, volume: 0));
+
+        ClosedCandle candle = book.Candle("SOLUSDT", FiveMinutes, Ten)!;
+        Assert.That(candle.BuyVolume, Is.EqualTo((decimal?)expected));
+        Assert.That((candle.Open, candle.Close, candle.Volume), Is.EqualTo((100m, 101m, 25m)), "the candle is built as before");
+    }
+
+    [Test]
+    public void A_minute_without_trades_does_not_take_the_buy_volume_of_the_candle_away()
+    {
+        MarketBook book = Book(Ten.AddMinutes(6));
+        book.Apply(Minute("SOLUSDT", Ten, 100, 101, volume: 5) with { BuyVolume = 2 });
+        book.Apply(Minute("SOLUSDT", Ten.AddMinutes(1), 101, 101, volume: 0));
+
+        Assert.That(book.Candle("SOLUSDT", FiveMinutes, Ten)!.BuyVolume, Is.EqualTo(2m));
+    }
+
     private static MarketBook Book(DateTimeOffset now)
     {
         return new MarketBook(new FakeTimeProvider(now), TimeSpan.FromSeconds(15));

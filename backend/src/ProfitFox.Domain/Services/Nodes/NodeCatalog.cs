@@ -164,7 +164,7 @@ public static class NodeCatalog
             new NodeKind(
                 Candle,
                 [],
-                [.. new[] { "open", "high", "low", "close", "volume" }.Select(name => new PinDeclaration(name, PinType.Number))],
+                [.. new[] { "open", "high", "low", "close", "volume", "buyVolume" }.Select(name => new PinDeclaration(name, PinType.Number))],
                 [],
                 _ => new CandleNode()),
             new NodeKind(FundingRate, [], [new PinDeclaration("value", PinType.Number)], [], _ => new FundingRateNode()),

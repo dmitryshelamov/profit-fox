@@ -94,11 +94,11 @@ typecheck`, `npm run lint`, `npm run format:check`, `npm run build`. Кажда�
 
 ## 6. Объём покупок
 
-- [ ] 6.1 `ClosedCandle.BuyVolume` (решение 7), `HistoryCandle.ToClosedCandle` передаёт его. Проверить юнит-тестом
+- [x] 6.1 `ClosedCandle.BuyVolume` (решение 7), `HistoryCandle.ToClosedCandle` передаёт его. Проверить юнит-тестом
   перевода свечи истории.
-- [ ] 6.2 `LiveMinute.BuyVolume`, `GrpcMarketFeed.Minute` читает его; `MarketBook.Candle` суммирует, `null` при
+- [x] 6.2 `LiveMinute.BuyVolume`, `GrpcMarketFeed.Minute` читает его; `MarketBook.Candle` суммирует, `null` при
   неизвестном у минуты со сделками. Проверить тестами сценарии spec `market-live-feed` «Объём покупок свечи из минут».
-- [ ] 6.3 Выход `buyVolume` узла «свеча» на месте 5. Проверить юнит-тестами сценарии «Данные свечи», ожидание подписи
+- [x] 6.3 Выход `buyVolume` узла «свеча» на месте 5. Проверить юнит-тестами сценарии «Данные свечи», ожидание подписи
   `candle` в `NodeCatalogTests`.
 
 ## 7. Проверка

@@ -112,7 +112,7 @@ public sealed class NodeCatalogTests
         string[] expected =
         [
             "parameters: -> threshold:number",
-            "candle: -> open:number high:number low:number close:number volume:number",
+            "candle: -> open:number high:number low:number close:number volume:number buyVolume:number",
             "funding-rate: -> value:number",
             "open-interest: -> value:number",
             "pair-candle: -> open:number high:number low:number close:number volume:number",

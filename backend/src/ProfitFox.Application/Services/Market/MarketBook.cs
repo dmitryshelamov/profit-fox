@@ -122,7 +122,8 @@ public sealed class MarketBook(TimeProvider time, TimeSpan closeDelay)
     /// <summary>
     ///     The candle of <paramref name="timeframe" /> opened at <paramref name="open" />, built from the closed minutes of its
     ///     window as the service builds it; a minute with a volume of 0 is not among them. Null when the pair has no minute with
-    ///     trades there.
+    ///     trades there. Its buy volume is the sum of those of its minutes, and missing when a minute with trades did not tell
+    ///     one (change add-idea-score, spec market-live-feed «Объём покупок свечи из минут»).
     /// </summary>
     public ClosedCandle? Candle(string symbol, TimeSpan timeframe, DateTimeOffset open)
     {
@@ -136,8 +137,10 @@ public sealed class MarketBook(TimeProvider time, TimeSpan closeDelay)
         decimal low = 0;
         decimal close = 0;
         decimal volume = 0;
+        decimal? buyVolume = 0;
         foreach (LiveMinute minute in pair.Between(open, open + timeframe).Where(Traded))
         {
+            buyVolume = buyVolume is { } sum && minute.BuyVolume is { } bought ? sum + bought : null;
             first ??= minute;
             high = minute == first ? minute.High : Math.Max(high, minute.High);
             low = minute == first ? minute.Low : Math.Min(low, minute.Low);
@@ -145,7 +148,7 @@ public sealed class MarketBook(TimeProvider time, TimeSpan closeDelay)
             volume += minute.Volume;
         }
 
-        return first is null ? null : new ClosedCandle(open, open + timeframe, first.Open, high, low, close, volume);
+        return first is null ? null : new ClosedCandle(open, open + timeframe, first.Open, high, low, close, volume, buyVolume);
     }
 
     /// <summary>

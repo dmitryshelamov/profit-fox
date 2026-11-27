@@ -21,7 +21,7 @@ public sealed record HistoryCandle(
 
     public ClosedCandle ToClosedCandle(TimeSpan interval)
     {
-        return new ClosedCandle(OpenTime, OpenTime + interval, Parse(Open), Parse(High), Parse(Low), Parse(Close), Parse(Volume));
+        return new ClosedCandle(OpenTime, OpenTime + interval, Parse(Open), Parse(High), Parse(Low), Parse(Close), Parse(Volume), BuyVolume is null ? null : Parse(BuyVolume));
     }
 
     private static decimal Parse(string text)
