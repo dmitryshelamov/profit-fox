@@ -52,19 +52,38 @@ public sealed class RestRecentHistory(HttpClient http, GrpcChannel? channel = nu
     private readonly Dictionary<string, DateTimeOffset> _warned = new(StringComparer.Ordinal);
     private readonly Lock _warnedLock = new();
 
+    /// <summary>
+    ///     The newest <paramref name="limit" /> candles before <paramref name="before" />, oldest first. The service refuses a
+    ///     window of more than <see cref="MaxLimit" /> candles, so a deeper one (a warm-up of a trend of 1199 closes of 4h) is
+    ///     read in windows of at most <see cref="MaxLimit" />, oldest first; one that is still loading makes the whole read so.
+    /// </summary>
     public async Task<RecentRead<HistoryCandle>> Candles(string instrumentId, TimeSpan interval, DateTimeOffset before, int limit, CancellationToken cancellation)
     {
-        (DateTimeOffset from, DateTimeOffset to) = Window(interval, before, limit);
+        DateTimeOffset to = Floor(before, interval);
+        DateTimeOffset from = to - (interval * Math.Max(limit, 1));
         string path = $"api/instruments/{Uri.EscapeDataString(instrumentId)}/candles?interval={Interval(interval)}";
-        return await Read(path, "candles", from, to, item => new HistoryCandle(
-            Time(item, "openTime"),
-            Number(item, "open")!,
-            Number(item, "high")!,
-            Number(item, "low")!,
-            Number(item, "close")!,
-            Number(item, "volume")!,
-            Number(item, "turnover"),
-            Number(item, "buyVolume")), cancellation);
+        List<HistoryCandle> candles = [];
+        for (DateTimeOffset start = from; start < to; start += interval * MaxLimit)
+        {
+            DateTimeOffset end = start + (interval * MaxLimit) < to ? start + (interval * MaxLimit) : to;
+            RecentRead<HistoryCandle> read = await Read(path, "candles", start, end, item => new HistoryCandle(
+                Time(item, "openTime"),
+                Number(item, "open")!,
+                Number(item, "high")!,
+                Number(item, "low")!,
+                Number(item, "close")!,
+                Number(item, "volume")!,
+                Number(item, "turnover"),
+                Number(item, "buyVolume")), cancellation);
+            if (read.Loading)
+            {
+                return RecentRead<HistoryCandle>.StillLoading;
+            }
+
+            candles.AddRange(read.Items);
+        }
+
+        return new RecentRead<HistoryCandle>(Loading: false, candles);
     }
 
     public async Task<RecentRead<HistoryPayment>> Funding(string instrumentId, DateTimeOffset from, DateTimeOffset to, CancellationToken cancellation)
