@@ -11,8 +11,9 @@ namespace ProfitFox.Application.Ports.MarketData;
 public interface IRecentHistory
 {
     /// <summary>
-    ///     At most <paramref name="limit" /> (up to 1000) closed candles of <paramref name="interval" /> closed by
-    ///     <paramref name="before" />, the newest ones, oldest first.
+    ///     At most <paramref name="limit" /> closed candles of <paramref name="interval" /> closed by
+    ///     <paramref name="before" />, the newest ones, oldest first; more than one answer of the service holds (1000) are read
+    ///     in several.
     /// </summary>
     /// <exception cref="Exceptions.HistoryUnavailableException">The service did not answer.</exception>
     Task<RecentRead<HistoryCandle>> Candles(string instrumentId, TimeSpan interval, DateTimeOffset before, int limit, CancellationToken cancellation);

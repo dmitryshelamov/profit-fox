@@ -75,6 +75,26 @@ public sealed class RestRecentHistoryTests
     }
 
     [Test]
+    public async Task More_than_a_thousand_candles_are_read_in_windows_of_at_most_a_thousand_oldest_first()
+    {
+        await using MarketDataServer server = await MarketDataServer.Start();
+        var history = new RestRecentHistory(server.Http);
+        var step = TimeSpan.FromMinutes(15);
+
+        RecentRead<HistoryCandle> read = await history.Candles("btc", step, Midnight, 1200, CancellationToken.None);
+
+        Assert.That(read.Loading, Is.False);
+        Assert.That(read.Items, Has.Count.EqualTo(1200), "a warm-up deeper than one answer, as 1199 closes of a trend");
+        Assert.That(read.Items.Select(candle => candle.OpenTime), Is.Ordered.And.Unique);
+        Assert.That(read.Items[0].OpenTime, Is.EqualTo(Midnight - (step * 1200)));
+        Assert.That(read.Items[^1].OpenTime, Is.EqualTo(Midnight - step));
+        Assert.That(
+            server.Data.RestQueries.Select(Query).Select(query => (DateTimeOffset.Parse(query["from"]), DateTimeOffset.Parse(query["to"]))),
+            Is.EqualTo(new[] { (Midnight - (step * 1200), Midnight - (step * 200)), (Midnight - (step * 200), Midnight) }),
+            "the service refuses a window of more than 1000 candles");
+    }
+
+    [Test]
     public async Task The_service_answers_numbers_and_named_lists()
     {
         await using MarketDataServer server = await MarketDataServer.Start();
