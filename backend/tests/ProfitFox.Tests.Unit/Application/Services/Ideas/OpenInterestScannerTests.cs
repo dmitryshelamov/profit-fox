@@ -1,3 +1,4 @@
+using ProfitFox.Application.Exceptions;
 using ProfitFox.Application.Ports.MarketData.Feed;
 using ProfitFox.Application.Services.Ideas;
 using ProfitFox.Domain.Entities.Ideas;
@@ -47,6 +48,24 @@ public sealed class OpenInterestScannerTests
         }
         """;
 
+    // «ETH ↑»: the close of the candle above 100, without the node «OI».
+    private const string CloseAbove =
+        """
+        {
+          "formatVersion": 1,
+          "outputs": [{ "name": "up", "type": "boolean" }],
+          "nodes": [
+            { "id": "c", "kind": "candle" },
+            { "id": "gt", "kind": "compare", "settings": { "operation": "gt" }, "inputs": { "b": 100 } },
+            { "id": "out", "kind": "outputs" }
+          ],
+          "wires": [
+            { "from": "c.close", "to": "gt.a" },
+            { "from": "gt.result", "to": "out.up" }
+          ]
+        }
+        """;
+
     [TestCase(1_060_000, true)]
     [TestCase(1_040_000, false)]
     public async Task The_label_of_open_interest_on_the_first_live_candle_is_that_of_a_backtest(int live, bool put)
@@ -79,6 +98,29 @@ public sealed class OpenInterestScannerTests
 
         Assert.That(rig.History.Asked.Where(asked => asked.StartsWith("open-interest", StringComparison.Ordinal)).Order(), Is.EqualTo(new[] { "open-interest btc", "open-interest eth", "open-interest sol" }));
         Assert.That(rig.History.Asked.Count(asked => asked.StartsWith("candles", StringComparison.Ordinal)), Is.EqualTo(6), "candles of 1h and of 15m for each pair");
+    }
+
+    /// <summary>
+    ///     Task 8.6 (review, P2): the service refuses the points of open interest of a pair — only the graphs with the node «OI»
+    ///     wait to be read again; the strategy and a label without the node on the same timeframe are warmed up and give the
+    ///     idea and its label on the first live candle.
+    /// </summary>
+    [Test]
+    public async Task A_refused_read_of_open_interest_holds_back_only_the_graphs_with_the_node()
+    {
+        ScannerRig rig = Rig();
+        rig.History.OpenInterestRefusing["eth"] = new HistoryUnavailableException("open interest: 503 Service Unavailable");
+        await rig.Label("oi-up-1h", "OI ↑ 1h", Hour, OpenInterestUp);
+        await rig.Label("eth-up-1h", "ETH ↑", Hour, CloseAbove);
+        await rig.Enable("close-up", "8h");
+        await rig.Start();
+
+        await rig.Minutes("ETHUSDT", Ten, 60, close: 101);
+        await rig.At(Eleven.AddSeconds(15));
+
+        Idea idea = rig.Ideas.Ideas.Single(item => item.Symbol == "ETHUSDT");
+        Assert.That(idea.Moment, Is.EqualTo(Eleven));
+        Assert.That(idea.Labels, Is.EqualTo(new[] { "ETH ↑" }), "the label of open interest is not warm and is not put");
     }
 
     [Test]

@@ -472,10 +472,22 @@ public sealed class IdeaScanner
             DateTimeOffset from = candles.Items.Count > 0 ? candles.Items[0].OpenTime - TimeSpan.FromDays(1) : now - TimeSpan.FromDays(2);
             RecentRead<HistoryPayment> funding = await _history.Funding(instrument, from, now, cancellationToken);
             // The points of open interest only for a timeframe with a graph with the node «OI», one read for the pair and the
-            // timeframe: the last point of each interval of the candles (change add-idea-score, design.md, decision 6).
-            RecentRead<OpenInterestPoint>? interest = runs.Any(run => run.OpenInterest)
-                ? await _history.OpenInterestPoints(instrument, timeframe, now, _settings.WarmupCandles, cancellationToken)
-                : null;
+            // timeframe: the last point of each interval of the candles (change add-idea-score, design.md, decision 6). A read
+            // that fails holds back only the graphs with the node; the others of the timeframe warm up (task 8.6).
+            RecentRead<OpenInterestPoint>? interest = null;
+            Exception? interestFailure = null;
+            if (runs.Any(run => run.OpenInterest))
+            {
+                try
+                {
+                    interest = await _history.OpenInterestPoints(instrument, timeframe, now, _settings.WarmupCandles, cancellationToken);
+                }
+                catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+                {
+                    interestFailure = exception;
+                }
+            }
+
             var named = new Dictionary<string, IReadOnlyList<HistoryCandle>>(StringComparer.Ordinal);
             foreach (string pair in runs.SelectMany(run => run.Named).Distinct(StringComparer.Ordinal))
             {
@@ -487,6 +499,12 @@ public sealed class IdeaScanner
 
             foreach (Run run in runs)
             {
+                if (run.OpenInterest && interestFailure is { } refused)
+                {
+                    _warmed.Enqueue(Refused(run, symbol, refused));
+                    continue;
+                }
+
                 Dictionary<string, IReadOnlyList<HistoryCandle>>? own = null;
                 foreach (string pair in run.Named.Where(named.ContainsKey))
                 {
@@ -506,17 +524,23 @@ public sealed class IdeaScanner
             // stop of the scanner (task 19.2): the pair is read again later, and the reason is told.
             foreach (Run run in runs)
             {
-                _warmed.Enqueue(new Warmup(run, symbol, Loading: true, [], [], null)
-                {
-                    Failure = exception.Message,
-                    Reason = exception is HistoryUnavailableException refusal ? refusal.Reason : exception.GetType().Name
-                });
+                _warmed.Enqueue(Refused(run, symbol, exception));
             }
         }
         finally
         {
             _parallel.Release();
         }
+    }
+
+    // A read of the warm-up that failed: the pair of the run is read again later, and the reason is told.
+    private static Warmup Refused(Run run, string symbol, Exception exception)
+    {
+        return new Warmup(run, symbol, Loading: true, [], [], null)
+        {
+            Failure = exception.Message,
+            Reason = exception is HistoryUnavailableException refusal ? refusal.Reason : exception.GetType().Name
+        };
     }
 
     // The graphs of the warmed pairs go through the history read; what they ordered there is no idea.

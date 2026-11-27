@@ -234,6 +234,12 @@ public sealed class FakeRecentHistory : IRecentHistory
     /// </summary>
     public Dictionary<string, Exception> Refusing { get; } = [];
 
+    /// <summary>
+    ///     The ids of the pairs whose points of open interest the service refuses with this exception (change add-idea-score,
+    ///     task 8.6); their candles still come.
+    /// </summary>
+    public Dictionary<string, Exception> OpenInterestRefusing { get; } = [];
+
     public List<string> Asked { get; } = [];
 
     Task<RecentRead<HistoryCandle>> IRecentHistory.Candles(string instrumentId, TimeSpan interval, DateTimeOffset before, int limit, CancellationToken cancellation)
@@ -291,6 +297,11 @@ public sealed class FakeRecentHistory : IRecentHistory
         if (Loading.Contains(instrumentId))
         {
             return Task.FromResult(RecentRead<OpenInterestPoint>.StillLoading);
+        }
+
+        if (OpenInterestRefusing.TryGetValue(instrumentId, out Exception? refusal))
+        {
+            throw refusal;
         }
 
         long step = interval.Ticks;
