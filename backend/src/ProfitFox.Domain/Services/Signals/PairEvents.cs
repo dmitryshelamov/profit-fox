@@ -19,13 +19,14 @@ public static class PairEvents
         string symbol,
         IEnumerable<HistoryCandle> candles,
         IEnumerable<HistoryPayment> funding,
-        IReadOnlyDictionary<string, IReadOnlyList<HistoryCandle>>? named = null)
+        IReadOnlyDictionary<string, IReadOnlyList<HistoryCandle>>? named = null,
+        IEnumerable<OpenInterestPoint>? openInterest = null)
     {
         var executor = new SignalExecutor(signal);
         List<DateTimeOffset> events = [];
-        foreach ((ClosedCandle closed, FundingPayment? lastFunding, IReadOnlyDictionary<string, ClosedCandle>? pairs) in PairCandles.WithPairs(timeframe, candles, funding, named))
+        foreach ((ClosedCandle closed, CandleFacts facts, IReadOnlyDictionary<string, ClosedCandle>? pairs) in PairCandles.WithPairs(timeframe, candles, funding, named, openInterest))
         {
-            if (executor.Step(symbol, closed, lastFunding, pairs) is { } found)
+            if (executor.Step(symbol, closed, facts, pairs) is { } found)
             {
                 events.Add(found.Moment);
             }

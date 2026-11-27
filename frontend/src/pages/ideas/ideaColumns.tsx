@@ -1,4 +1,5 @@
 import type { Idea, IdeaSummary } from '@/api/ideas';
+import { scoreText, scoreTone } from '@/api/scoring';
 import {
   changeText,
   leftText,
@@ -95,6 +96,16 @@ const labels: PagedColumn<Idea> = {
   text: true,
   cell: (idea) => <LabelBadges labels={idea.labels} />,
 };
+/**
+ * The score of an idea by the weights now (change add-idea-score, spec idea-score «Балл в разделе «Идеи»»): its sign and
+ * number, green above nought, red below, grey at nought.
+ */
+const score: PagedColumn<Idea> = {
+  key: 'score',
+  title: 'Балл',
+  numeric: true,
+  cell: (idea) => <span className={scoreTone(idea.score)}>{scoreText(idea.score)}</span>,
+};
 /** How many labels a row of the tables of «Идеи» shows before «+N»: the room goes to the name of the strategy (task 21.3). */
 export const shownLabelsOfIdeas = 1;
 const fewLabels: PagedColumn<Idea> = {
@@ -137,6 +148,7 @@ export const openColumns: readonly PagedColumn<Idea>[] = [
   timeframe,
   side,
   fewLabels,
+  score,
   {
     key: 'moment',
     title: `Появилась, ${zoneLabel()}`,
@@ -162,6 +174,7 @@ export const closedColumns: readonly PagedColumn<Idea>[] = [
   timeframe,
   side,
   fewLabels,
+  score,
   {
     key: 'moment',
     title: `Вход, ${zoneLabel()}`,
@@ -194,6 +207,7 @@ export const pairColumns: readonly PagedColumn<Idea>[] = [
   timeframe,
   side,
   labels,
+  score,
   {
     key: 'moment',
     title: `Вход, ${zoneLabel()}`,

@@ -15,6 +15,12 @@ public static class ListFields
     public const string Short = "short";
 
     /// <summary>
+    ///     The score of an idea (change add-idea-score, design.md, decision 2): the sum of the weights of its labels by its side
+    ///     now; a whole number in a condition.
+    /// </summary>
+    public const string Score = "score";
+
+    /// <summary>
     ///     The sizes a page may have.
     /// </summary>
     public static readonly IReadOnlyList<int> PageSizes = [50, 100, 200];
@@ -45,6 +51,7 @@ public static class ListFields
         new ListField("timeframe", "ТФ", FieldType.Choice, FieldPlace.Idea, Values: Timeframes.All),
         new ListField("side", "Сторона", FieldType.Choice, FieldPlace.Idea, Values: [Long, Short]),
         new ListField("labels", "Метки", FieldType.Text, FieldPlace.Idea),
+        new ListField(Score, "Балл", FieldType.Number, FieldPlace.Idea),
         new ListField("moment", "Появилась", FieldType.Time, FieldPlace.Idea),
         new ListField("entry", "Вход", FieldType.Number, FieldPlace.Idea),
         new ListField("stop", "Стоп", FieldType.Number, FieldPlace.Idea),
@@ -87,6 +94,7 @@ public static class ListFields
         new ListField("timeframe", "Таймфрейм", FieldType.Choice, FieldPlace.Idea, Values: Timeframes.All),
         new ListField("side", "Сторона", FieldType.Choice, FieldPlace.Idea, Values: [Long, Short]),
         new ListField("label", "Метка", FieldType.Text, FieldPlace.Idea),
+        new ListField(Score, "Балл", FieldType.Number, FieldPlace.Idea),
         new ListField("result", "Результат", FieldType.Number, FieldPlace.Idea, ListField.Percent),
         new ListField("minutesLeft", "Минут до срока", FieldType.Number, FieldPlace.Idea),
         new ListField("hasStop", "Есть стоп", FieldType.Boolean, FieldPlace.Idea, Values: ["true", "false"])

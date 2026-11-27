@@ -24,6 +24,7 @@ import { IdeaChoiceRow } from './IdeaChoices';
 import { closedColumns, openColumns, summaryColumns } from './ideaColumns';
 import { ScannerBanner } from './ScannerBanner';
 import { StrategyChips } from './StrategyChips';
+import { useMinScore } from './useMinScore';
 
 /** How often the open ideas and the state of the scanner are read again (spec «Раздел «Идеи»»: at least every 15 s). */
 export const ideasRefreshMs = 15_000;
@@ -56,13 +57,20 @@ export function IdeasPage({
   const filter = useChosenFilter('ideas');
   // The kind of the pair is one for both tabs and «Рынок», kept in the browser (change add-instrument-kind-filter).
   const instrumentKind = useInstrumentKind();
+  // «Балл от» is one for both tabs too, kept in the browser under its own key (change add-idea-score, decision 4).
+  const leastScore = useMinScore();
   const withKind = (choices: IdeaChoices): IdeaChoices => ({
     ...choices,
     kind: instrumentKind.kind,
+    minScore: leastScore.minScore,
   });
-  const takeKind = ({ kind, ...choices }: IdeaChoices): IdeaChoices => {
+  const takeKind = ({ kind, minScore, ...choices }: IdeaChoices): IdeaChoices => {
     if (kind !== instrumentKind.kind) {
       instrumentKind.choose(kind);
+    }
+
+    if (minScore !== leastScore.minScore) {
+      leastScore.choose(minScore);
     }
 
     return choices;
@@ -224,6 +232,7 @@ function OpenIdeas({ filter, onGone, choices, page, onChoices, onPage, onOpen }:
           <PagedTable
             label="Открытые идеи"
             columns={openColumns}
+            dense
             rows={ideas.data.items}
             sort={list.sort}
             rowKey={(idea) => idea.id}
@@ -360,6 +369,7 @@ function Journal({ filter, onGone, choices, page, onChoices, onPage, onOpen }: L
           <PagedTable
             label="Закрытые идеи"
             columns={closedColumns}
+            dense
             rows={ideas.data.items}
             sort={list.sort}
             rowKey={(idea) => idea.id}

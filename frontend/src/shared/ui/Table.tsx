@@ -15,7 +15,7 @@ export function Table({
 }) {
   return (
     <div
-      className={`rounded-[10px] border border-line bg-panel [&_tbody:last-child>tr:last-child>td:first-child]:rounded-bl-[9px] [&_tbody:last-child>tr:last-child>td:last-child]:rounded-br-[9px] ${className}`}
+      className={`overflow-x-auto rounded-[10px] border border-line bg-panel [&_tbody:last-child>tr:last-child>td:first-child]:rounded-bl-[9px] [&_tbody:last-child>tr:last-child>td:last-child]:rounded-br-[9px] ${className}`}
     >
       <table aria-label={label} className="w-full border-collapse text-left text-[13px]">
         {children}

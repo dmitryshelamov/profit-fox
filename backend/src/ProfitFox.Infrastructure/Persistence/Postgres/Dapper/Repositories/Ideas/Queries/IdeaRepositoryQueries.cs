@@ -1,3 +1,5 @@
+using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Lists;
+
 namespace ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Ideas.Queries;
 
 /// <summary>
@@ -13,20 +15,22 @@ internal static class IdeaRepositoryQueries
         i.entry_raw AS "EntryRaw", i.entry_price AS "EntryPrice", i.entry_time AS "EntryTime", i.stop_price AS "StopPrice", i.target_price AS "TargetPrice",
         i.funding_paid AS "FundingPaid", i.funding_until AS "FundingUntil", i.last_close AS "LastClose", i.computed_until AS "ComputedUntil", i.now_result AS "NowResult", i.now_at AS "NowAt",
         i.exit_time AS "ExitTime", i.exit_reason AS "ExitReason", i.ambiguous AS "Ambiguous", i.exit_price AS "ExitPrice", i.result AS "Result",
-        i.result_usdt AS "ResultUsdt", i.excluded AS "Excluded"
+        i.result_usdt AS "ResultUsdt", i.excluded AS "Excluded", i.score::int AS "Score"
         """;
 
     // The name of an idea is that of its strategy now, or the one it was born with when the strategy is gone.
     public const string From = "FROM ideas i LEFT JOIN strategies s ON s.id = i.strategy_id";
 
-    public const string Insert =
-        """
-        INSERT INTO ideas (id, strategy_id, strategy_name, strategy_version, timeframe, symbol, side, moment, size, after_minutes, until, stop, target,
-                           candle_close, labels, state, now_result, now_at)
-        VALUES (@Id, @StrategyId, @StrategyName, @StrategyVersion, @Timeframe, @Symbol, @Side, @Moment, @Size, @AfterMinutes, @Until, @Stop, @Target,
-                @CandleClose, @Labels, @State, @NowResult, @NowAt)
-        ON CONFLICT DO NOTHING
-        """;
+    // The score from the weights now over the labels of the idea (change add-idea-score, design.md, decision 2); the labels
+    // of an idea never change after this, so nothing else writes it but a change of the weights.
+    public static readonly string Insert =
+        $"""
+         INSERT INTO ideas (id, strategy_id, strategy_name, strategy_version, timeframe, symbol, side, moment, size, after_minutes, until, stop, target,
+                            candle_close, labels, state, now_result, now_at, score)
+         VALUES (@Id, @StrategyId, @StrategyName, @StrategyVersion, @Timeframe, @Symbol, @Side, @Moment, @Size, @AfterMinutes, @Until, @Stop, @Target,
+                 @CandleClose, @Labels, @State, @NowResult, @NowAt, {ListColumns.ScoreOf("@Side", "@Labels")})
+         ON CONFLICT DO NOTHING
+         """;
 
     public const string Save =
         """

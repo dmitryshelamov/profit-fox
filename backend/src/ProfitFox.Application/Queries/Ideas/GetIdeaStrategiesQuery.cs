@@ -22,7 +22,8 @@ public sealed record GetIdeaStrategiesQuery(
     string? ExitReason = null,
     int? PeriodDays = null,
     Guid? Filter = null,
-    string? PairKind = null) : IRequest<IdeaStrategiesResult>;
+    string? PairKind = null,
+    string? MinScore = null) : IRequest<IdeaStrategiesResult>;
 
 /// <summary>
 ///     The number of all the ideas counted, a row for every strategy of a category of ideas and for every strategy of the

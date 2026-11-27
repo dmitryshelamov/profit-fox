@@ -53,7 +53,8 @@ internal static class IdeaDbConverter
             ExitRaw = row.ExitPrice,
             Result = row.Result,
             ResultUsdt = row.ResultUsdt,
-            Excluded = row.Excluded
+            Excluded = row.Excluded,
+            Score = row.Score
         };
     }
 

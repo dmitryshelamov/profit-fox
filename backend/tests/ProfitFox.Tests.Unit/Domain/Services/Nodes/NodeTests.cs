@@ -1,4 +1,5 @@
 using ProfitFox.Domain.ValueObjects.Execution;
+using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Tests.Unit.Domain.Services.Execution;
 
 namespace ProfitFox.Tests.Unit.Domain.Services.Nodes;
@@ -28,6 +29,28 @@ public sealed class NodeTests
     private const string HighFundingWires = """
                                             { "from": "rate.value", "to": "high.a" }, { "from": "p.threshold", "to": "high.b" }
                                             """;
+
+    /// <summary>
+    ///     Change add-idea-score, task 6.3: spec strategy-execution «Данные свечи» — <c>buyVolume</c> of a candle of 5m built of
+    ///     five minutes with buy volumes 1, 2, 0, 3 and 4 is 10; when one of them is not known it is missing, and the volume and
+    ///     the prices are there.
+    /// </summary>
+    [TestCase(10.0, false)]
+    [TestCase(null, true)]
+    public void The_candle_node_gives_the_buy_volume_of_the_candle(double? bought, bool missing)
+    {
+        const string both = """{ "id": "c", "kind": "candle" }""";
+        DateTimeOffset open = History.Start;
+        var candle = new ClosedCandle(open, open.AddMinutes(5), 100, 102, 99, 101.5m, 25, bought is { } sum ? (decimal)sum : null);
+
+        List<PinValue[]> buy = History.Run(History.WithOutput("number", "c.buyVolume", both), [candle]);
+        List<PinValue[]> volume = History.Run(History.WithOutput("number", "c.volume", both), [candle]);
+        List<PinValue[]> close = History.Run(History.WithOutput("number", "c.close", both), [candle]);
+
+        Assert.That(buy[0][0].IsMissing, Is.EqualTo(missing));
+        Assert.That(buy[0][0].Number, Is.EqualTo(missing ? null : (decimal?)10m));
+        Assert.That((volume[0][0].Number, close[0][0].Number), Is.EqualTo(((decimal?)25m, (decimal?)101.5m)));
+    }
 
     [Test]
     public void The_candle_node_gives_the_close_of_the_candle()
@@ -176,8 +199,8 @@ public sealed class NodeTests
         decimal[] closes = [1, 0, 2, 0, 3, 1, 5, 0, 8, 1];
         decimal[] changed = [.. closes.Take(same), .. closes.Skip(same).Select(close => 100 - close)];
 
-        List<PinValue[]> first = History.Run(json, History.Closes(closes), Payment);
-        List<PinValue[]> second = History.Run(json, History.Closes(changed), Payment);
+        List<PinValue[]> first = History.Run(json, History.Closes(closes), Facts);
+        List<PinValue[]> second = History.Run(json, History.Closes(changed), Facts);
 
         Assert.That(second.Take(same).SelectMany(output => output), Is.EqualTo(first.Take(same).SelectMany(output => output)));
         Assert.That(second.Skip(same).SelectMany(output => output), Is.Not.EqualTo(first.Skip(same).SelectMany(output => output)));
@@ -187,6 +210,7 @@ public sealed class NodeTests
     {
         yield return History.WithOutput("number", "c.close", CandleNode);
         yield return History.WithOutput("number", "rate.value", """{ "id": "rate", "kind": "funding-rate" }""");
+        yield return History.WithOutput("number", "oi.value", """{ "id": "oi", "kind": "open-interest" }""");
         yield return History.WithOutput("boolean", "pos.result", Positive, PositiveWire);
         yield return History.WithOutput("number", "prev.result", $$"""{{CandleNode}}, { "id": "prev", "kind": "previous" }""", """{ "from": "c.close", "to": "prev.value" }""");
         yield return History.WithOutput("boolean", "both.result", $$"""{{Positive}}, {{HighFunding}}, { "id": "both", "kind": "and" }""",
@@ -196,6 +220,13 @@ public sealed class NodeTests
         yield return History.WithOutput("boolean", "no.result", $$"""{{Positive}}, { "id": "no", "kind": "not" }""", $$"""{{PositiveWire}}, { "from": "pos.result", "to": "no.value" }""");
         yield return History.WithOutput("event", "first.event", $$"""{{Positive}}, { "id": "first", "kind": "first-time" }""",
             $$"""{{PositiveWire}}, { "from": "pos.result", "to": "first.value" }""");
+    }
+
+    // The payment and the point of open interest of each candle follow its close: the payment at the close, the point of
+    // 1000 per unit of close five minutes before it (change add-idea-score).
+    private static CandleFacts Facts(ClosedCandle candle)
+    {
+        return new CandleFacts(Payment(candle), new OpenInterestPoint(candle.CloseTime.AddMinutes(-5), candle.Close * 1000m));
     }
 
     // The payment of each candle follows its close: 0.0001 per unit of close, paid at the close.

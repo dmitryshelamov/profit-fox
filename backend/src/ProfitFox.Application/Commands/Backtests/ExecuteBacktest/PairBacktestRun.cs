@@ -1,5 +1,6 @@
 using ProfitFox.Application.Queries.MarketData;
 using ProfitFox.Domain.Services.Backtests;
+using ProfitFox.Domain.Services.Graph;
 using ProfitFox.Domain.ValueObjects.Backtests;
 using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Domain.ValueObjects.Strategies.Enums;
@@ -9,7 +10,8 @@ namespace ProfitFox.Application.Commands.Backtests.ExecuteBacktest;
 /// <summary>
 ///     The sets of a backtest on one pair with its history read from the market-data service (spec market-history;
 ///     change add-strategy-backtest, design.md, decision 4): the candles of each timeframe of the sets from the start of the
-///     data and the funding with the payment at the end are read once, the minutes as <see cref="PairBacktest" /> asks for
+///     data and the funding with the payment at the end are read once — the points of open interest too for a graph with the
+///     node «OI» — the minutes as <see cref="PairBacktest" /> asks for
 ///     them, nothing after the end of history.
 /// </summary>
 public static class PairBacktestRun
@@ -41,6 +43,10 @@ public static class PairBacktestRun
         }
 
         HistoryRead<HistoryPayment> funding = await history.FundingThrough(pair.Id, HistoryPeriod.DataStart, end, cancellationToken);
+        // The points of open interest only for a graph with the node «OI» (change add-idea-score, design.md, decision 6).
+        IReadOnlyList<OpenInterestPoint>? openInterest = plans.Any(plan => GraphNeeds.OpenInterest(plan.Strategy.Graph))
+            ? (await history.OpenInterestThrough(pair.Id, HistoryPeriod.DataStart, end, cancellationToken)).Items
+            : null;
         return await PairBacktest.RunAsync(
             pair.Symbol,
             kind,
@@ -49,7 +55,8 @@ public static class PairBacktestRun
             funding,
             (from, to, token) => history.Candles(pair.Id, TimeSpan.FromMinutes(1), from, to, token),
             cancellationToken,
-            named);
+            named,
+            openInterest);
     }
 
     /// <summary>

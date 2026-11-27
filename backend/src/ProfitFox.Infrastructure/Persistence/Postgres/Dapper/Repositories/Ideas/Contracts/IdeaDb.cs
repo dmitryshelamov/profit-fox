@@ -7,6 +7,11 @@ internal sealed class IdeaDb
 {
     public Guid Id { get; init; }
 
+    /// <summary>
+    ///     The stored score, equal to the one by the weights now (design.md, decision 2).
+    /// </summary>
+    public int Score { get; init; }
+
     public Guid StrategyId { get; init; }
 
     public string StrategyName { get; init; } = "";

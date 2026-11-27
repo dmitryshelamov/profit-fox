@@ -7,22 +7,30 @@ namespace ProfitFox.Application.Queries.Preview;
 
 /// <summary>
 ///     The history of one pair and timeframe over exploration that a preview reads: the candles with their coverage and
-///     the funding payments. The previews of a signal and of a strategy read it the same way and share it in
+///     the funding payments, and the points of open interest for a graph with the node «OI» (change add-idea-score,
+///     design.md, decision 6). The previews of a signal and of a strategy read it the same way and share it in
 ///     <see cref="PreviewHistoryCache" />.
 /// </summary>
-public sealed record PreviewHistory(HistoryRead<HistoryCandle> Candles, HistoryRead<HistoryPayment> Funding)
+public sealed record PreviewHistory(HistoryRead<HistoryCandle> Candles, HistoryRead<HistoryPayment> Funding, HistoryRead<OpenInterestPoint>? OpenInterest = null)
 {
     /// <summary>
-    ///     History from the start of the data to <paramref name="end" />, as a backtest with that end reads it on the clock
-    ///     <paramref name="time" />. The hash is not needed, but the reader wants one.
+    ///     The points of open interest read, none when they were not.
     /// </summary>
-    public static async Task<PreviewHistory> ReadAsync(IHistorySource source, string instrument, TimeSpan timeframe, DateTimeOffset end, TimeProvider time)
+    public IReadOnlyList<OpenInterestPoint>? Points => OpenInterest?.Items;
+
+    /// <summary>
+    ///     History from the start of the data to <paramref name="end" />, as a backtest with that end reads it on the clock
+    ///     <paramref name="time" />, with the points of open interest when <paramref name="openInterest" />. The hash is not
+    ///     needed, but the reader wants one.
+    /// </summary>
+    public static async Task<PreviewHistory> ReadAsync(IHistorySource source, string instrument, TimeSpan timeframe, DateTimeOffset end, TimeProvider time, bool openInterest = false)
     {
         using var hash = new HistoryHash();
         var history = new MarketHistory(source, end, hash, time);
         HistoryRead<HistoryCandle> candles = await history.Candles(instrument, timeframe, HistoryPeriod.DataStart, end, CancellationToken.None);
         HistoryRead<HistoryPayment> funding = await history.FundingThrough(instrument, HistoryPeriod.DataStart, end, CancellationToken.None);
-        return new PreviewHistory(candles, funding);
+        HistoryRead<OpenInterestPoint>? points = openInterest ? await history.OpenInterestThrough(instrument, HistoryPeriod.DataStart, end, CancellationToken.None) : null;
+        return new PreviewHistory(candles, funding, points);
     }
 
     /// <summary>

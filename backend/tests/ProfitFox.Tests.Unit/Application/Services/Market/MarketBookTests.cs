@@ -333,6 +333,81 @@ public sealed class MarketBookTests
         Assert.That(book.CloseBefore("BTCUSDT", Ten.AddMinutes(2)), Is.EqualTo(101m));
     }
 
+    /// <summary>
+    ///     Change add-idea-score, task 5.6: spec market-live-feed «Точки OI в живых данных» — the candle of 1h closed at 12:00
+    ///     gets the point of 11:55, or that of 11:50 when the one of 11:55 did not come; a point at the close is the next
+    ///     candle's, and one told after the close with an earlier time is seen by the next close.
+    /// </summary>
+    [Test]
+    public void The_close_of_a_candle_gets_the_last_point_of_open_interest_before_it()
+    {
+        MarketBook book = Book(Ten.AddHours(2));
+        DateTimeOffset noon = Ten.AddHours(2);
+        book.Apply(new LivePoint(LivePointKind.OpenInterest, "SOLUSDT", noon.AddMinutes(-10), 4_800_000m));
+        book.Apply(new LivePoint(LivePointKind.OpenInterest, "SOLUSDT", noon.AddMinutes(-5), 4_900_000m));
+        book.Apply(new LivePoint(LivePointKind.OpenInterest, "SOLUSDT", noon, 5_000_000m));
+        book.Apply(new LivePoint(LivePointKind.OpenInterest, "BTCUSDT", noon.AddMinutes(-10), 1m));
+
+        Assert.That(book.LastOpenInterest("SOLUSDT", noon), Is.EqualTo(new OpenInterestPoint(noon.AddMinutes(-5), 4_900_000m)));
+        Assert.That(book.LastOpenInterest("BTCUSDT", noon), Is.EqualTo(new OpenInterestPoint(noon.AddMinutes(-10), 1m)), "a pair whose point of 11:55 did not come");
+        Assert.That(book.LastOpenInterest("SOLUSDT", noon.AddHours(1)), Is.EqualTo(new OpenInterestPoint(noon, 5_000_000m)), "the point at the close is the next candle's");
+        Assert.That(book.LastOpenInterest("ETHUSDT", noon), Is.Null);
+        Assert.That(book.LastOpenInterest("SOLUSDT", noon.AddMinutes(-10)), Is.Null, "nothing before the first point");
+
+        book.Apply(new LivePoint(LivePointKind.OpenInterest, "SOLUSDT", noon.AddMinutes(55), 5_100_000m));
+        book.Apply(new LivePoint(LivePointKind.OpenInterest, "SOLUSDT", noon.AddMinutes(50), 5_050_000m));
+
+        Assert.That(book.LastOpenInterest("SOLUSDT", noon.AddMinutes(55)), Is.EqualTo(new OpenInterestPoint(noon.AddMinutes(50), 5_050_000m)), "told late, seen by the next close");
+    }
+
+    [Test]
+    public void The_points_of_open_interest_are_kept_25_hours()
+    {
+        MarketBook book = Book(Ten);
+        for (int step = 0; step <= 26 * 12; step++)
+        {
+            book.Apply(new LivePoint(LivePointKind.OpenInterest, "SOLUSDT", Ten.AddMinutes(5 * step), step));
+        }
+
+        DateTimeOffset newest = Ten.AddHours(26);
+        Assert.That(book.LastOpenInterest("SOLUSDT", newest - MarketBook.Kept + TimeSpan.FromMinutes(1))!.Time, Is.EqualTo(newest - MarketBook.Kept), "a day and an hour back");
+        Assert.That(book.LastOpenInterest("SOLUSDT", newest - MarketBook.Kept), Is.Null, "older ones are gone");
+        Assert.That(book.Snapshot("SOLUSDT"), Is.Null, "the snapshot needs a minute");
+    }
+
+    /// <summary>
+    ///     Change add-idea-score, task 6.2: spec market-live-feed «Объём покупок свечи из минут» — the candle of 5m sums the buy
+    ///     volumes of its minutes; one minute with trades without it leaves the candle without one, and the candle is built.
+    /// </summary>
+    [TestCase(false, 10)]
+    [TestCase(true, null)]
+    public void The_buy_volume_of_a_candle_is_the_sum_of_its_minutes(bool missing, int? expected)
+    {
+        MarketBook book = Book(Ten.AddMinutes(6));
+        decimal[] bought = [1, 2, 0, 3, 4];
+        for (int minute = 0; minute < 5; minute++)
+        {
+            decimal? buyVolume = missing && minute == 3 ? null : bought[minute];
+            book.Apply(Minute("SOLUSDT", Ten.AddMinutes(minute), 100, 101, volume: 5) with { BuyVolume = buyVolume });
+        }
+
+        book.Apply(Minute("SOLUSDT", Ten.AddMinutes(5), 101, 101, volume: 0));
+
+        ClosedCandle candle = book.Candle("SOLUSDT", FiveMinutes, Ten)!;
+        Assert.That(candle.BuyVolume, Is.EqualTo((decimal?)expected));
+        Assert.That((candle.Open, candle.Close, candle.Volume), Is.EqualTo((100m, 101m, 25m)), "the candle is built as before");
+    }
+
+    [Test]
+    public void A_minute_without_trades_does_not_take_the_buy_volume_of_the_candle_away()
+    {
+        MarketBook book = Book(Ten.AddMinutes(6));
+        book.Apply(Minute("SOLUSDT", Ten, 100, 101, volume: 5) with { BuyVolume = 2 });
+        book.Apply(Minute("SOLUSDT", Ten.AddMinutes(1), 101, 101, volume: 0));
+
+        Assert.That(book.Candle("SOLUSDT", FiveMinutes, Ten)!.BuyVolume, Is.EqualTo(2m));
+    }
+
     private static MarketBook Book(DateTimeOffset now)
     {
         return new MarketBook(new FakeTimeProvider(now), TimeSpan.FromSeconds(15));

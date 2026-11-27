@@ -100,6 +100,40 @@ public sealed class RestRecentHistory(HttpClient http, GrpcChannel? channel = nu
     public async Task<RecentRead<OpenInterestPoint>> OpenInterest(string instrumentId, TimeSpan interval, DateTimeOffset before, int limit, CancellationToken cancellation, IReadSteps? steps = null)
     {
         (DateTimeOffset from, DateTimeOffset to) = Window(interval, before, limit);
+        RecentRead<OpenInterestPoint> read = await RawPoints(instrumentId, from, to, steps, cancellation);
+        return read.Loading ? read : new RecentRead<OpenInterestPoint>(Loading: false, PerInterval(read.Items, interval));
+    }
+
+    /// <summary>
+    ///     The last point of open interest of each of the <paramref name="count" /> intervals before <paramref name="before" />
+    ///     with its own time, oldest first (change add-idea-score, design.md, decision 6): the warm-up of a graph with the node
+    ///     «OI» sees the point a backtest sees. An interval without a point has none. Read as the candles are, in windows of at
+    ///     most <see cref="MaxLimit" /> intervals; one that is still loading makes the whole read so.
+    /// </summary>
+    public async Task<RecentRead<OpenInterestPoint>> OpenInterestPoints(string instrumentId, TimeSpan interval, DateTimeOffset before, int count, CancellationToken cancellation)
+    {
+        DateTimeOffset to = Floor(before, interval);
+        DateTimeOffset from = to - (interval * Math.Max(count, 1));
+        List<OpenInterestPoint> points = [];
+        for (DateTimeOffset start = from; start < to; start += interval * MaxLimit)
+        {
+            DateTimeOffset end = start + (interval * MaxLimit) < to ? start + (interval * MaxLimit) : to;
+            RecentRead<OpenInterestPoint> read = await RawPoints(instrumentId, start, end, steps: null, cancellation);
+            if (read.Loading)
+            {
+                return RecentRead<OpenInterestPoint>.StillLoading;
+            }
+
+            points.AddRange(LastOfInterval(read.Items, interval));
+        }
+
+        return new RecentRead<OpenInterestPoint>(Loading: false, points);
+    }
+
+    // The points of 5 minutes at times in [from, to): the days before the current UTC day from History when there is a
+    // channel, the rest from the REST.
+    private async Task<RecentRead<OpenInterestPoint>> RawPoints(string instrumentId, DateTimeOffset from, DateTimeOffset to, IReadSteps? steps, CancellationToken cancellation)
+    {
         List<OpenInterestPoint> points = [];
         DateTimeOffset rest = from;
         if (channel is not null)
@@ -149,7 +183,7 @@ public sealed class RestRecentHistory(HttpClient http, GrpcChannel? channel = nu
             points.AddRange(current.Items);
         }
 
-        return new RecentRead<OpenInterestPoint>(Loading: false, PerInterval(points, interval));
+        return new RecentRead<OpenInterestPoint>(Loading: false, points);
     }
 
     // The stored points of [from, to), or the reason History refused or failed. An attempt out of the time of the page is
@@ -248,9 +282,9 @@ public sealed class RestRecentHistory(HttpClient http, GrpcChannel? channel = nu
     }
 
     /// <summary>
-    ///     The last point of each interval, at the open of the interval, oldest first.
+    ///     The last point of each interval with its own time, oldest first (change add-idea-score).
     /// </summary>
-    public static IReadOnlyList<OpenInterestPoint> PerInterval(IEnumerable<OpenInterestPoint> points, TimeSpan interval)
+    public static IReadOnlyList<OpenInterestPoint> LastOfInterval(IEnumerable<OpenInterestPoint> points, TimeSpan interval)
     {
         var last = new SortedDictionary<DateTimeOffset, OpenInterestPoint>();
         foreach (OpenInterestPoint point in points)
@@ -262,7 +296,15 @@ public sealed class RestRecentHistory(HttpClient http, GrpcChannel? channel = nu
             }
         }
 
-        return [.. last.Select(pair => pair.Value with { Time = pair.Key })];
+        return [.. last.Values];
+    }
+
+    /// <summary>
+    ///     The last point of each interval, at the open of the interval, oldest first.
+    /// </summary>
+    public static IReadOnlyList<OpenInterestPoint> PerInterval(IEnumerable<OpenInterestPoint> points, TimeSpan interval)
+    {
+        return [.. LastOfInterval(points, interval).Select(point => point with { Time = Floor(point.Time, interval) })];
     }
 
     /// <summary>

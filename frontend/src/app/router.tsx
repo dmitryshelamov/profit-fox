@@ -15,6 +15,7 @@ import { RunFormPage } from '@/pages/runs/RunFormPage';
 import { RunPage } from '@/pages/runs/RunPage';
 import { RunsPage } from '@/pages/runs/RunsPage';
 import { SetPage } from '@/pages/runs/SetPage';
+import { ScoringPage } from '@/pages/scoring/ScoringPage';
 import { NewSignalPage, SavedSignalPage } from '@/pages/signals/SignalEditorPage';
 import { SignalListPage } from '@/pages/signals/SignalListPage';
 import { NewStrategyPage, SavedStrategyPage } from '@/pages/strategies/StrategyEditorPage';
@@ -214,6 +215,13 @@ const pairRoute = createRoute({
   },
 });
 
+/** «Скоринг», under the header (change add-idea-score, design.md, decision 4). */
+const scoringRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/scoring',
+  component: ScoringPage,
+});
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   shellRoute.addChildren([
@@ -227,6 +235,7 @@ const routeTree = rootRoute.addChildren([
     ideasRoute,
     marketRoute,
     pairRoute,
+    scoringRoute,
   ]),
   newSignalRoute,
   signalRoute,

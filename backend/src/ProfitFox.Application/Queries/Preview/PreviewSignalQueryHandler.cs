@@ -67,7 +67,8 @@ internal sealed class PreviewSignalQueryHandler(IHistorySource source, IInstrume
         }
 
         DateTimeOffset end = PreviewPeriod.End(time.GetUtcNow());
-        PreviewHistory history = await cache.Get(pair.Id, timeframe, end, () => PreviewHistory.ReadAsync(source, pair.Id, timeframe, end, time), cancellationToken);
+        bool openInterest = GraphNeeds.OpenInterest(signal.Graph);
+        PreviewHistory history = await cache.Get(pair.Id, timeframe, end, () => PreviewHistory.ReadAsync(source, pair.Id, timeframe, end, time, openInterest), cancellationToken, openInterest);
         HistoryRead<HistoryCandle> candles = history.Candles;
         HistoryRead<HistoryPayment> funding = history.Funding;
         IReadOnlyDictionary<string, IReadOnlyList<HistoryCandle>>? named = await PreviewHistory.NamedAsync(
@@ -79,7 +80,7 @@ internal sealed class PreviewSignalQueryHandler(IHistorySource source, IInstrume
             end,
             time,
             cancellationToken);
-        IReadOnlyList<DateTimeOffset> events = PairEvents.Of(signal, timeframe, pair.Symbol, candles.Items, funding.Items, named);
+        IReadOnlyList<DateTimeOffset> events = PairEvents.Of(signal, timeframe, pair.Symbol, candles.Items, funding.Items, named, history.Points);
 
         var preview = new SignalPreviewInternal(
             pair.ToInternal(),

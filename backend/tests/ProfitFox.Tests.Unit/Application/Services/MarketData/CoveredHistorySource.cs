@@ -87,6 +87,28 @@ internal sealed class CoveredHistorySource : IHistorySource
         return Answer(new HistoryRead<HistoryPayment>(Coverage.Trim(Covered, from, to), payments));
     }
 
+    public static readonly TimeSpan PointStep = TimeSpan.FromMinutes(5);
+
+    /// <summary>
+    ///     A point of open interest every five minutes when its moment is covered, its value with up to three decimals
+    ///     (change add-idea-score).
+    /// </summary>
+    public Task<HistoryRead<OpenInterestPoint>> ReadOpenInterest(string instrumentId, DateTimeOffset from, DateTimeOffset to, CancellationToken cancellation)
+    {
+        Record("open-interest", from, to);
+        List<OpenInterestPoint> points = [];
+        for (DateTimeOffset time = Grid(from, PointStep); time < to; time += PointStep)
+        {
+            if (Coverage.Covers(Covered, time, time.AddTicks(1)))
+            {
+                long index = (time - DateTimeOffset.UnixEpoch).Ticks / PointStep.Ticks;
+                points.Add(new OpenInterestPoint(time, 50_000m + (index % 997) * 1.125m));
+            }
+        }
+
+        return Answer(new HistoryRead<OpenInterestPoint>(Coverage.Trim(Covered, from, to), points));
+    }
+
     private void Record(string kind, DateTimeOffset from, DateTimeOffset to)
     {
         lock (Reads)

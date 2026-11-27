@@ -330,5 +330,10 @@ public sealed class GetPairChartQueryHandlerTests
             InterestAsked.TrySetResult();
             return new RecentRead<OpenInterestPoint>(Loading: false, []);
         }
+
+        public Task<RecentRead<OpenInterestPoint>> OpenInterestPoints(string instrumentId, TimeSpan interval, DateTimeOffset before, int count, CancellationToken cancellation)
+        {
+            throw new NotSupportedException("The chart reads the points of open interest by OpenInterest.");
+        }
     }
 }

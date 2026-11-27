@@ -94,11 +94,11 @@ public sealed class WindowMemoryTests
 
         foreach (ClosedCandle candle in candles)
         {
-            decimal? atClose = again.Step(candle, lastFunding: null)[0].Number;
+            decimal? atClose = again.Step(candle, facts: null)[0].Number;
             decimal? afterFill = again.Again(PositionState.Closed, candle.CloseTime.AddMinutes(1))[0].Number;
             Assert.That(afterFill, Is.EqualTo(atClose), candle.OpenTime.ToString("O"));
             withFills.Add(atClose);
-            withoutFills.Add(plain.Step(candle, lastFunding: null)[0].Number);
+            withoutFills.Add(plain.Step(candle, facts: null)[0].Number);
         }
 
         Assert.That(withFills, Is.EqualTo(withoutFills));
@@ -139,7 +139,7 @@ public sealed class WindowMemoryTests
             runs[index] = NodeGraphs.Run(json);
             foreach (ClosedCandle candle in candles)
             {
-                runs[index].Step(candle, lastFunding: null);
+                runs[index].Step(candle, facts: null);
             }
         }
 

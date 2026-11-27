@@ -48,6 +48,7 @@ export function PagedTable<Row>({
   onSort,
   onOpen,
   selected = null,
+  dense = false,
 }: {
   readonly label: string;
   readonly columns: readonly PagedColumn<Row>[];
@@ -59,6 +60,11 @@ export function PagedTable<Row>({
   readonly onOpen?: (row: Row) => void;
   /** The key of the chosen row: lit, and scrolled into view when it changes. */
   readonly selected?: string | null;
+  /**
+   * Cells 14 px apart instead of 20, for the tables of ideas: with the column «Балл» they would not fit 1100 px otherwise
+   * (change add-idea-score, task 3.6).
+   */
+  readonly dense?: boolean;
 }) {
   const body = useRef<HTMLTableSectionElement>(null);
   // Scrolled once for a choice, when its row is there: new answers of the server leave the page where it is (task 18.23).
@@ -81,7 +87,7 @@ export function PagedTable<Row>({
   }, [selected, rows]);
 
   return (
-    <Table label={label}>
+    <Table label={label} className={dense ? '[&_td]:pl-3.5 [&_th]:pl-3.5' : ''}>
       <thead>
         <tr>
           {columns.map((column) => {

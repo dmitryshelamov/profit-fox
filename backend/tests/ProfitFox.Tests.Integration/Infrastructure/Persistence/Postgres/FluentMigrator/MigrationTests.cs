@@ -7,6 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 
 using ProfitFox.Infrastructure.Persistence.Postgres;
+using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Lists;
 using ProfitFox.Infrastructure.Persistence.Postgres.FluentMigrator;
 
 namespace ProfitFox.Tests.Integration.Infrastructure.Persistence.Postgres.FluentMigrator;
@@ -26,7 +27,11 @@ public sealed class MigrationTests
 
     private static readonly string[] IdeaTables = ["ideas", "market_pairs", "saved_filters", "scanner_lease", "signal_labels", "strategy_ideas"];
 
-    private static readonly string[] Tables = [.. BacktestTables.Concat(IdeaTables).Order(StringComparer.Ordinal)];
+    private static readonly string[] IdeaStageTables = [.. BacktestTables.Concat(IdeaTables).Order(StringComparer.Ordinal)];
+
+    private static readonly string[] ScoreTables = ["label_weights"];
+
+    private static readonly string[] Tables = [.. BacktestTables.Concat(IdeaTables).Concat(ScoreTables).Order(StringComparer.Ordinal)];
 
     [SetUp]
     public async Task Empty()
@@ -56,7 +61,7 @@ public sealed class MigrationTests
 
         await using var connection = new NpgsqlConnection(connectionString);
         long[] versions = [.. await connection.QueryAsync<long>("SELECT \"Version\" FROM \"VersionInfo\" ORDER BY \"Version\"")];
-        Assert.That(versions, Is.EqualTo(new[] { 202611200001L, 202611210001L, 202611220001L, 202611220002L, 202611230001L, 202611230002L, 202611230003L, 202611230004L, 202611250001L, 202611250002L }));
+        Assert.That(versions, Is.EqualTo(new[] { 202611200001L, 202611210001L, 202611220001L, 202611220002L, 202611230001L, 202611230002L, 202611230003L, 202611230004L, 202611250001L, 202611250002L, 202611270001L, 202611280001L }));
         Assert.That(await TablesOf(connectionString), Is.SupersetOf(new[] { "strategies", "strategy_versions", "strategy_signals" }));
     }
 
@@ -147,7 +152,7 @@ public sealed class MigrationTests
         Assert.That(await ColumnsOf(connection, BacktestTables), Is.EqualTo(before));
         Assert.That(
             await connection.QueryAsync<string>("SELECT indexname FROM pg_indexes WHERE tablename = 'ideas' ORDER BY indexname"),
-            Is.EqualTo(new[] { "ideas_birth_ux", "ideas_pk", "ideas_state_exit_time_ix", "ideas_state_moment_ix", "ideas_strategy_timeframe_ix", "ideas_symbol_moment_ix" }));
+            Is.EqualTo(new[] { "ideas_birth_ux", "ideas_labels_gin", "ideas_pk", "ideas_state_exit_time_ix", "ideas_state_moment_ix", "ideas_state_score_ix", "ideas_strategy_timeframe_ix", "ideas_symbol_moment_ix" }));
         Assert.That(ProfitFox.Infrastructure.Persistence.Postgres.BenchSchema.Expected, Is.GreaterThanOrEqualTo(202611230001L));
     }
 
@@ -172,7 +177,7 @@ public sealed class MigrationTests
 
         Assert.That(await connection.QueryAsync<string>(columns), Is.EqualTo(new[] { "name", "worker", "until", "live_since", "warmed", "pairs" }));
         Assert.That(await connection.ExecuteScalarAsync<int>("SELECT count(*) FROM pg_indexes WHERE indexname = 'ideas_state_exit_time_ix'"), Is.Zero, "task 18.16: Down takes the index away");
-        Assert.That(await TablesOf(connectionString), Is.EqualTo(Tables));
+        Assert.That(await TablesOf(connectionString), Is.EqualTo(IdeaStageTables));
     }
 
     /// <summary>
@@ -227,6 +232,87 @@ public sealed class MigrationTests
 
         Assert.That(await connection.QueryAsync<string>(columns), Does.Not.Contain("kind"));
         Assert.That(await connection.ExecuteScalarAsync<long>("SELECT count(*) FROM market_pairs"), Is.EqualTo(2));
+    }
+
+    /// <summary>
+    ///     Change add-idea-score, task 2.1 (design.md, decision 1): the weights of the labels are a table by the text of a label
+    ///     with two weights of −3 to +3; a weight of 4 is refused by the database, and Down takes only the table away.
+    /// </summary>
+    [Test]
+    public async Task The_weights_of_the_labels_come_refuse_a_weight_out_of_range_and_go_back()
+    {
+        string connectionString = await BenchDatabase.NewDatabase();
+        await using var connection = new NpgsqlConnection(connectionString);
+        var registrations = new ServiceCollection();
+        PostgresRegistrar.Configure(BenchDatabase.Settings(connectionString), registrations);
+        await using ServiceProvider services = registrations.BuildServiceProvider();
+        using IServiceScope scope = services.CreateScope();
+        IMigrationRunner runner = scope.ServiceProvider.GetRequiredService<IMigrationRunner>();
+        runner.MigrateUp(202611270001);
+
+        await connection.ExecuteAsync("INSERT INTO label_weights (text, long_weight, short_weight) VALUES ('↓ BTC 4h', -3, 3)");
+        Assert.That(await connection.QuerySingleAsync<(short, short)>("SELECT long_weight, short_weight FROM label_weights WHERE text = '↓ BTC 4h'"), Is.EqualTo(((short)-3, (short)3)));
+        PostgresException? tooHigh = Assert.ThrowsAsync<PostgresException>(() => connection.ExecuteAsync("INSERT INTO label_weights (text, long_weight, short_weight) VALUES ('фандинг ↑', 4, 0)"));
+        Assert.That(tooHigh!.SqlState, Is.EqualTo(PostgresErrorCodes.CheckViolation));
+        PostgresException? tooLow = Assert.ThrowsAsync<PostgresException>(() => connection.ExecuteAsync("UPDATE label_weights SET short_weight = -4 WHERE text = '↓ BTC 4h'"));
+        Assert.That(tooLow!.SqlState, Is.EqualTo(PostgresErrorCodes.CheckViolation));
+        PostgresException? twice = Assert.ThrowsAsync<PostgresException>(() => connection.ExecuteAsync("INSERT INTO label_weights (text, long_weight, short_weight) VALUES ('↓ BTC 4h', 0, 0)"));
+        Assert.That(twice!.SqlState, Is.EqualTo(PostgresErrorCodes.UniqueViolation));
+
+        runner.MigrateDown(202611250002);
+
+        Assert.That(await TablesOf(connectionString), Does.Not.Contain("label_weights"));
+        Assert.That(await TablesOf(connectionString), Does.Contain("ideas"));
+    }
+
+    /// <summary>
+    ///     Change add-idea-score, task 8.1 (design.md, decision 2): the score of an idea comes as a column filled by
+    ///     <c>ScoreOf</c> on the ideas and weights already there, with the index of the labels and that of the lists by score;
+    ///     Down takes only them away.
+    /// </summary>
+    [Test]
+    public async Task The_score_of_an_idea_comes_filled_from_the_weights_already_there_and_goes_back()
+    {
+        string connectionString = await BenchDatabase.NewDatabase();
+        await using var connection = new NpgsqlConnection(connectionString);
+        var registrations = new ServiceCollection();
+        PostgresRegistrar.Configure(BenchDatabase.Settings(connectionString), registrations);
+        await using ServiceProvider services = registrations.BuildServiceProvider();
+        using IServiceScope scope = services.CreateScope();
+        IMigrationRunner runner = scope.ServiceProvider.GetRequiredService<IMigrationRunner>();
+        runner.MigrateUp(202611270001);
+        await connection.ExecuteAsync("INSERT INTO label_weights (text, long_weight, short_weight) VALUES ('↓ BTC 4h', -2, 1), ('оборот ↑ 1h', 1, 0), ('⚡ всплеск', 0, -1)");
+        await connection.ExecuteAsync(
+            """
+            INSERT INTO ideas (id, strategy_id, strategy_name, strategy_version, timeframe, symbol, side, moment, size, after_minutes, until, candle_close, labels, state)
+            SELECT gen_random_uuid(), gen_random_uuid(), 's', 1, '1h', v.symbol, v.side, now(), 100, 0, now() + interval '1 day', 1, v.labels, v.state
+            FROM (VALUES ('AUSDT', 'long', ARRAY['↓ BTC 4h', 'оборот ↑ 1h', '⚡ всплеск'], 'open'),
+                         ('BUSDT', 'short', ARRAY['↓ BTC 4h', 'оборот ↑ 1h', '⚡ всплеск'], 'closed'),
+                         ('CUSDT', 'long', ARRAY[]::text[], 'open'),
+                         ('DUSDT', 'short', ARRAY['без веса', '⚡ всплеск'], 'closed'),
+                         ('EUSDT', 'long', ARRAY['↓ BTC 4h'], 'excluded')) AS v(symbol, side, labels, state)
+            """);
+
+        runner.MigrateUp(202611280001);
+
+        string scoreOf = ListColumns.ScoreOf("i");
+        Assert.That(
+            await connection.QueryAsync<(string, int, int)>($"SELECT i.symbol, i.score::int, {scoreOf} FROM ideas i ORDER BY i.symbol"),
+            Is.EqualTo(new[] { ("AUSDT", -1, -1), ("BUSDT", 0, 0), ("CUSDT", 0, 0), ("DUSDT", -1, -1), ("EUSDT", -2, -2) }));
+        Assert.That(
+            await connection.QueryAsync<string>("SELECT indexdef FROM pg_indexes WHERE tablename = 'ideas' AND indexname IN ('ideas_labels_gin', 'ideas_state_score_ix') ORDER BY indexname"),
+            Is.EqualTo(new[]
+            {
+                "CREATE INDEX ideas_labels_gin ON public.ideas USING gin (labels)",
+                "CREATE INDEX ideas_state_score_ix ON public.ideas USING btree (state, score DESC NULLS LAST, moment DESC, id)"
+            }));
+        Assert.That(await ColumnsOf(connection, ["ideas"]), Does.Contain("ideas.score:smallint:NO"));
+
+        runner.MigrateDown(202611270001);
+
+        Assert.That(await ColumnsOf(connection, ["ideas"]), Has.None.StartsWith("ideas.score:"));
+        Assert.That(await connection.ExecuteScalarAsync<long>("SELECT count(*) FROM pg_indexes WHERE tablename = 'ideas' AND indexname IN ('ideas_labels_gin', 'ideas_state_score_ix')"), Is.Zero);
+        Assert.That(await connection.ExecuteScalarAsync<long>("SELECT count(*) FROM ideas"), Is.EqualTo(5));
     }
 
     private static async Task<string[]> ColumnsOf(NpgsqlConnection connection, string[] tables)

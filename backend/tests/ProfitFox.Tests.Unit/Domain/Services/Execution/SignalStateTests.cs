@@ -20,7 +20,7 @@ public sealed class SignalStateTests
     {
         var executor = new SignalExecutor(CloseAbove);
 
-        bool?[] values = [.. History.Closes(99, 100, 101, 102, 99).Select(candle => executor.Value("BTCUSDT", candle, lastFunding: null))];
+        bool?[] values = [.. History.Closes(99, 100, 101, 102, 99).Select(candle => executor.Value("BTCUSDT", candle, facts: null))];
 
         Assert.That(values, Is.EqualTo(new bool?[] { false, true, true, true, false }));
     }
@@ -33,7 +33,7 @@ public sealed class SignalStateTests
         ClosedCandle first = History.Candle(0, 1);
         ClosedCandle second = History.Candle(1, 1);
 
-        Assert.That(executor.Value("BTCUSDT", first, lastFunding: null), Is.Null, "no payment yet: the rate is missing");
+        Assert.That(executor.Value("BTCUSDT", first, facts: null), Is.Null, "no payment yet: the rate is missing");
         Assert.That(executor.Value("BTCUSDT", second, new FundingPayment(second.CloseTime, 0.001m)), Is.True);
     }
 
@@ -55,7 +55,7 @@ public sealed class SignalStateTests
     {
         var executor = new SignalExecutor(CloseAbove);
 
-        DateTimeOffset?[] events = [.. History.Closes(99, 100, 101, 99, 100).Select(candle => executor.Step("BTCUSDT", candle, lastFunding: null)?.Moment)];
+        DateTimeOffset?[] events = [.. History.Closes(99, 100, 101, 99, 100).Select(candle => executor.Step("BTCUSDT", candle, facts: null)?.Moment)];
 
         Assert.That(events, Is.EqualTo(new DateTimeOffset?[] { null, History.Candle(1, 0).CloseTime, null, null, History.Candle(4, 0).CloseTime }));
     }

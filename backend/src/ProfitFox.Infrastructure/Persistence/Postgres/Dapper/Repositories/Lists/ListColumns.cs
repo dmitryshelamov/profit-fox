@@ -21,6 +21,24 @@ internal static class ListColumns
     // An open idea counts by its result now, a closed one by its outcome.
     public const string Result = "(CASE WHEN i.state = 'open' THEN i.now_result ELSE i.result END)";
 
+    /// <summary>
+    ///     The score of the idea under <paramref name="alias" /> counted from the weights now (change add-idea-score, design.md,
+    ///     decision 2): the sum of the weights of its labels by its side; 0 without labels or weights. The lists read the stored
+    ///     <c>ideas.score</c>; this is what it is written with and always equals.
+    /// </summary>
+    public static string ScoreOf(string alias)
+    {
+        return ScoreOf($"{alias}.side", $"{alias}.labels");
+    }
+
+    /// <summary>
+    ///     <see cref="ScoreOf(string)" /> of a side and labels given as SQL, such as the parameters of a new idea.
+    /// </summary>
+    public static string ScoreOf(string side, string labels)
+    {
+        return $"(SELECT COALESCE(sum(CASE WHEN {side} = 'long' THEN w.long_weight ELSE w.short_weight END), 0)::int FROM label_weights w WHERE w.text = ANY({labels}))";
+    }
+
     public static readonly IReadOnlyDictionary<string, string> Market = new Dictionary<string, string>(StringComparer.Ordinal)
     {
         ["symbol"] = "m.symbol",
@@ -41,6 +59,7 @@ internal static class ListColumns
         ["timeframe"] = "(CASE i.timeframe WHEN '5m' THEN 1 WHEN '15m' THEN 2 WHEN '1h' THEN 3 WHEN '4h' THEN 4 ELSE 5 END)",
         ["side"] = "i.side",
         ["labels"] = "NULLIF(array_to_string(i.labels, ' '), '')",
+        [ListFields.Score] = "i.score",
         ["moment"] = "i.moment",
         ["entry"] = "COALESCE(i.entry_price, i.candle_close)",
         ["stop"] = "i.stop_price",
@@ -77,6 +96,7 @@ internal static class ListColumns
         ["strategy"] = StrategyName,
         ["timeframe"] = "i.timeframe",
         ["side"] = "i.side",
+        [ListFields.Score] = "i.score",
         ["result"] = Result,
         ["minutesLeft"] = "(EXTRACT(EPOCH FROM (i.until - now())) / 60)",
         ["hasStop"] = "(i.stop IS NOT NULL)"

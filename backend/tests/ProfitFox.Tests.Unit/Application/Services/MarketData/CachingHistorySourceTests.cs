@@ -87,6 +87,28 @@ public sealed class CachingHistorySourceTests
         Assert.That(second.Items[^1].Time, Is.EqualTo(Day(2026, 3, 23)), "the payment at the end is told");
     }
 
+    /// <summary>
+    ///     Change add-idea-score, task 5.2: the points of open interest are kept by month of their own kind and given again
+    ///     as the service gives them.
+    /// </summary>
+    [Test]
+    public async Task The_points_of_open_interest_are_kept_by_month_of_their_own_kind()
+    {
+        var source = new CoveredHistorySource();
+        var store = new MemoryHistoryMonthStore();
+        CachingHistorySource caching = Caching(source, store);
+
+        HistoryRead<OpenInterestPoint> first = await caching.ReadOpenInterest(Btc, Day(2026, 3, 9), Day(2026, 3, 16), CancellationToken.None);
+        HistoryRead<OpenInterestPoint> second = await caching.ReadOpenInterest(Btc, Day(2026, 3, 16), Day(2026, 3, 23), CancellationToken.None);
+        HistoryRead<OpenInterestPoint> direct = await new CoveredHistorySource().ReadOpenInterest(Btc, Day(2026, 3, 16), Day(2026, 3, 23), CancellationToken.None);
+
+        Assert.That(source.Reads, Is.EqualTo(new[] { ("open-interest", March, April) }), "the second read is the cache's");
+        Assert.That(store.Months, Is.EqualTo(new[] { HistoryMonth.OpenInterest(Btc, March) }));
+        Assert.That(store.Months.Single().Kind, Is.EqualTo(HistoryKind.OpenInterest));
+        Assert.That(first.Items, Has.Count.EqualTo(7 * 288));
+        Assert.That((second.Coverage, second.Items), Is.EqualTo((direct.Coverage, direct.Items)).Using<(IReadOnlyList<TimeRange>, IReadOnlyList<OpenInterestPoint>)>((a, b) => a.Item1.SequenceEqual(b.Item1) && a.Item2.SequenceEqual(b.Item2)));
+    }
+
     // Task 2.2.
 
     [Test]

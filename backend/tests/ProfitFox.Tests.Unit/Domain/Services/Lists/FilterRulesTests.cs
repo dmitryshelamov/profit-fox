@@ -34,6 +34,22 @@ public sealed class FilterRulesTests
         Assert.That(problems.Select(problem => problem.Field), Is.EqualTo(new[] { "name", "place" }));
     }
 
+    /// <summary>
+    ///     Change add-idea-score, task 2.5: spec saved-filters «Поля фильтра» — the score is an idea field of whole numbers.
+    /// </summary>
+    [Test]
+    public void The_score_is_a_field_of_an_idea_and_takes_a_whole_number()
+    {
+        ListField score = ListFields.Filter.Single(field => field.Name == "score");
+
+        Assert.That((score.Type, score.Place, score.Unit), Is.EqualTo((FieldType.Number, FieldPlace.Idea, (string?)null)));
+        Assert.That(FilterRules.CheckConditions([new FilterCondition("score", "ge", "2"), new FilterCondition("score", "between", "-1", "3")]), Is.Empty);
+        Assert.That(
+            FilterRules.CheckConditions([new FilterCondition("score", "ge", "1.5"), new FilterCondition("score", "between", "0", "0,5")]).Select(problem => problem.Condition),
+            Is.EqualTo(new int?[] { 0, 1 }));
+        Assert.That(ListFields.Ideas.Single(field => field.Name == "score").Type, Is.EqualTo(FieldType.Number), "the lists sort by it");
+    }
+
     [Test]
     public void Between_takes_two_numbers_and_a_field_of_values_takes_one_of_them()
     {
@@ -95,7 +111,7 @@ public sealed class FilterRulesTests
         }));
         Assert.That(ListFields.Filter.Where(field => field.Place == FieldPlace.Idea).Select(field => field.Name), Is.EqualTo(new[]
         {
-            "strategy", "timeframe", "side", "label", "result", "minutesLeft", "hasStop"
+            "strategy", "timeframe", "side", "label", "score", "result", "minutesLeft", "hasStop"
         }));
         Assert.That(ListFields.Filter.Single(field => field.Name == "side").Values, Is.EqualTo(new[] { "long", "short" }));
     }

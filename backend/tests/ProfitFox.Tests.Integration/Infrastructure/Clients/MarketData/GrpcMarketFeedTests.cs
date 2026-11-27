@@ -50,6 +50,27 @@ public sealed class GrpcMarketFeedTests
     }
 
     /// <summary>
+    ///     Change add-idea-score, task 6.2: a minute of the feed carries its buy volume, and one the feed tells without it has
+    ///     none.
+    /// </summary>
+    [Test]
+    public async Task A_minute_carries_its_buy_volume_when_the_feed_tells_it()
+    {
+        await using MarketDataServer server = await MarketDataServer.Start();
+        await using var reader = Reader.Start(server, new FakeTimeProvider(Now));
+        await reader.Until<MarketPairs>(_ => true);
+        await Poll.Until("the subscription of minutes", () => Task.FromResult(server.Data.Minutes.Readers == 1));
+        CandleUpdate unknown = FakeLiveFeedTests.Minute("eth", Now);
+        unknown.ClearBuyVolume();
+
+        server.Data.Minutes.Push(FakeLiveFeedTests.Minute("btc", Now));
+        server.Data.Minutes.Push(unknown);
+
+        await reader.Until<LiveMinute>(minute => minute.Symbol == "ETHUSDT");
+        Assert.That(reader.Minutes.Select(minute => (minute.Symbol, minute.BuyVolume)), Is.EqualTo(new[] { ("BTCUSDT", (decimal?)6m), ("ETHUSDT", (decimal?)null) }));
+    }
+
+    /// <summary>
     ///     Spec market-live-feed «Новая пара» and «Пара снята с торгов»; task 18.8 (г): a pair left out of two answers of the
     ///     catalog in a row is dropped, one answer without it keeps it.
     /// </summary>

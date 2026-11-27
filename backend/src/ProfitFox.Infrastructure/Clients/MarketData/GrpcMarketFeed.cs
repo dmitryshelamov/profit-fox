@@ -340,7 +340,8 @@ public sealed class GrpcMarketFeed(GrpcChannel channel, IInstrumentCatalog catal
             close,
             volume,
             candle.HasTurnover ? Parse(candle.Turnover) : volume * close,
-            candle.Closed);
+            candle.Closed,
+            candle.HasBuyVolume ? Parse(candle.BuyVolume) : null);
     }
 
     private static LivePoint? Point(PairsView pairs, LivePointKind kind, string instrument, Timestamp time, string value)

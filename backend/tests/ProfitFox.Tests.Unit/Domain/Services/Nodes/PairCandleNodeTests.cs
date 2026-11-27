@@ -23,7 +23,7 @@ public sealed class PairCandleNodeTests
         var run = new GraphRun(History.Graph(History.WithOutput("number", "btc.close", Btc)));
         ClosedCandle sol = Candle(open: 2, close: 238.42m);
 
-        PinValue close = run.Step(sol, lastFunding: null, pairs: Pairs(("BTCUSDT", Candle(open: 2, close: 96000m))))[0];
+        PinValue close = run.Step(sol, facts: null, pairs: Pairs(("BTCUSDT", Candle(open: 2, close: 96000m))))[0];
 
         Assert.That(sol.OpenTime, Is.EqualTo(History.Start.AddHours(8)));
         Assert.That(close.Number, Is.EqualTo(96000m));
@@ -39,16 +39,16 @@ public sealed class PairCandleNodeTests
             """{ "from": "btc.close", "to": "low.a" }""");
         var run = new GraphRun(History.Graph(json));
 
-        PinValue other = run.Step(Candle(open: 0, close: 1), lastFunding: null, pairs: Pairs(("ETHUSDT", Candle(open: 0, close: 3000))))[0];
-        PinValue shifted = run.Step(Candle(open: 1, close: 1), lastFunding: null, pairs: Pairs(("BTCUSDT", Candle(open: 0, close: 96000))))[0];
-        PinValue none = run.Step(Candle(open: 2, close: 1), lastFunding: null)[0];
+        PinValue other = run.Step(Candle(open: 0, close: 1), facts: null, pairs: Pairs(("ETHUSDT", Candle(open: 0, close: 3000))))[0];
+        PinValue shifted = run.Step(Candle(open: 1, close: 1), facts: null, pairs: Pairs(("BTCUSDT", Candle(open: 0, close: 96000))))[0];
+        PinValue none = run.Step(Candle(open: 2, close: 1), facts: null)[0];
 
         // The released compare gives a missing value on a missing input (spec strategy-execution «Отсутствующие значения»):
         // the comparison is not true, so «впервые» after it gives no event.
         Assert.That((other.Boolean, shifted.Boolean, none.Boolean), Is.EqualTo(((bool?)null, (bool?)null, (bool?)null)));
         Assert.That(new[] { other, shifted, none }.Any(value => value.Boolean == true), Is.False);
         var values = new GraphRun(History.Graph(History.WithOutput("number", "btc.open", Btc)));
-        Assert.That(values.Step(Candle(open: 0, close: 1), lastFunding: null)[0].IsMissing, Is.True);
+        Assert.That(values.Step(Candle(open: 0, close: 1), facts: null)[0].IsMissing, Is.True);
     }
 
     [Test]
@@ -73,7 +73,7 @@ public sealed class PairCandleNodeTests
         var own = new GraphRun(History.Graph(candle));
         var btc = new ClosedCandle(History.Start, History.Start + History.Bar, 95000, 96500, 94800, 96000, 12);
 
-        Assert.That(run.Step(btc, lastFunding: null, pairs: Pairs(("BTCUSDT", btc)))[0], Is.EqualTo(own.Step(btc, lastFunding: null)[0]));
+        Assert.That(run.Step(btc, facts: null, pairs: Pairs(("BTCUSDT", btc)))[0], Is.EqualTo(own.Step(btc, facts: null)[0]));
     }
 
     [Test]

@@ -1,4 +1,5 @@
 using ProfitFox.Domain.ValueObjects.Execution;
+using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Domain.ValueObjects.Positions;
 
 namespace ProfitFox.Domain.ValueObjects.Nodes;
@@ -9,7 +10,8 @@ namespace ProfitFox.Domain.ValueObjects.Nodes;
 ///     state of the position, and whether the computation moves the memory of the nodes (change add-position-node,
 ///     design.md, decision 7): only the computation at the close of a candle does. <see cref="Pairs" /> are the closed
 ///     candles of the pairs the graph names (change add-ideas-and-market, design.md, decision 7), by symbol; a pair
-///     without a candle of the same open time is not there.
+///     without a candle of the same open time is not there. <see cref="OpenInterest" /> is the last point of open interest
+///     with a time before the close (change add-idea-score, design.md, decision 5), null before the first one.
 /// </summary>
 internal readonly record struct NodeContext(
     ClosedCandle Candle,
@@ -17,4 +19,5 @@ internal readonly record struct NodeContext(
     DateTimeOffset Moment,
     PositionState Position,
     bool Commit,
-    IReadOnlyDictionary<string, ClosedCandle>? Pairs = null);
+    IReadOnlyDictionary<string, ClosedCandle>? Pairs = null,
+    OpenInterestPoint? OpenInterest = null);

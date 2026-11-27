@@ -142,6 +142,43 @@ public sealed class RestRecentHistoryTests
         Assert.That(server.Data.RestRequests, Is.EqualTo(new[] { "open-interest btc", "open-interest btc", "open-interest btc" }));
     }
 
+    /// <summary>
+    ///     Change add-idea-score, task 5.5 (design.md, decision 6): the warm-up of a graph with the node «OI» gets the last point
+    ///     of each interval with its own time, 1200 intervals read in windows of at most 1000.
+    /// </summary>
+    [Test]
+    public async Task The_points_of_1200_intervals_are_the_last_of_each_with_its_own_time()
+    {
+        await using MarketDataServer server = await MarketDataServer.Start();
+        var history = new RestRecentHistory(server.Http);
+        DateTimeOffset before = Midnight.AddDays(40).AddMinutes(7);
+
+        RecentRead<OpenInterestPoint> interest = await history.OpenInterestPoints("btc", TimeSpan.FromMinutes(15), before, 1200, CancellationToken.None);
+
+        DateTimeOffset to = Midnight.AddDays(40);
+        Assert.That(interest.Loading, Is.False);
+        Assert.That(interest.Items, Has.Count.EqualTo(1200));
+        Assert.That(interest.Items.Select(point => point.Time), Is.EqualTo(Enumerable.Range(0, 1200).Select(step => to.AddMinutes(15 * (step - 1200) + 10))));
+        Assert.That(interest.Items.Select(point => point.Value), Is.All.EqualTo(24_000m));
+        Assert.That(
+            server.Data.RestQueries.Select(query => (DateTimeOffset.Parse(Query(query)["from"]), DateTimeOffset.Parse(Query(query)["to"]))).Where(window => window.Item2 == to.AddMinutes(-15 * 200) || window.Item2 == to).Select(window => window.Item2).Distinct(),
+            Is.EqualTo(new[] { to.AddMinutes(-15 * 200), to }),
+            "a window of 1000 intervals, then one of 200");
+    }
+
+    [Test]
+    public async Task An_interval_without_a_point_has_none_and_the_others_keep_their_own_time()
+    {
+        var service = new PagedService(
+            """{ "points": [ { "time": "2026-01-19T21:05:00+00:00", "openInterest": 100 }, { "time": "2026-01-19T21:55:00+00:00", "openInterest": 101 }, { "time": "2026-01-19T23:10:00+00:00", "openInterest": "103.5" } ], "continueFrom": null }""");
+        var history = new RestRecentHistory(new HttpClient(service) { BaseAddress = new Uri("http://market-data/") });
+
+        RecentRead<OpenInterestPoint> read = await history.OpenInterestPoints("btc", TimeSpan.FromHours(1), Midnight, 3, CancellationToken.None);
+
+        Assert.That(read.Items, Is.EqualTo(new[] { new OpenInterestPoint(Midnight.AddMinutes(-125), 101m), new OpenInterestPoint(Midnight.AddMinutes(-50), 103.5m) }));
+        Assert.That(DateTimeOffset.Parse(Query(service.Requests[0])["from"]), Is.EqualTo(Midnight.AddHours(-3)));
+    }
+
     [Test]
     public async Task The_client_reads_numbers_and_strings_and_follows_continueFrom()
     {

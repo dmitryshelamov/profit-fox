@@ -79,6 +79,35 @@ public sealed class FileHistoryMonthStoreTests
         Assert.That(File.Exists(System.IO.Path.Combine(_folder.Path, "btc", "funding", "2026-03.gz")), Is.True);
     }
 
+    /// <summary>
+    ///     Change add-idea-score, task 5.2 (design.md, decision 6): a month of open interest is its own kind — written with the
+    ///     kind 3 in a folder of its own — and reads back as it was saved; the files of candles and funding keep the kinds 1
+    ///     and 2 they had, so the files written before read as they did.
+    /// </summary>
+    [Test]
+    public async Task A_month_of_open_interest_is_a_kind_of_its_own_and_candles_and_funding_keep_theirs()
+    {
+        var points = HistoryMonth.OpenInterest("btc", Day(2026, 3, 1));
+        var funding = new HistoryMonth("btc", null, Day(2026, 3, 1));
+        var interest = new HistoryRead<OpenInterestPoint>(
+            [new TimeRange(points.Start, points.End)],
+            [.. Enumerable.Range(0, 31 * 288).Select(step => new OpenInterestPoint(points.Start.AddMinutes(5 * step), 52345.123m + step))]);
+        FileHistoryMonthStore store = Store();
+
+        await store.SaveOpenInterest(points, interest, CancellationToken.None);
+        await store.SaveFunding(funding, Funding(funding), CancellationToken.None);
+        await store.SaveCandles(March, Minutes(March, 10), CancellationToken.None);
+        HistoryRead<OpenInterestPoint>? read = await Store().ReadOpenInterest(points, CancellationToken.None);
+
+        Assert.That(read!.Coverage, Is.EqualTo(interest.Coverage));
+        Assert.That(read.Items, Is.EqualTo(interest.Items), "the time and the value with its decimals");
+        Assert.That(store.PathOf(points), Is.EqualTo(System.IO.Path.Combine(_folder.Path, "btc", "open-interest", "2026-03.gz")));
+        Assert.That(KindIn(store.PathOf(points)), Is.EqualTo(3));
+        Assert.That(KindIn(store.PathOf(funding)), Is.EqualTo(2));
+        Assert.That(KindIn(store.PathOf(March)), Is.EqualTo(1));
+        Assert.That((await Store().ReadFunding(funding, CancellationToken.None))!.Items, Is.EqualTo(Funding(funding).Items));
+    }
+
     [Test]
     public async Task A_pair_with_signs_a_folder_cannot_have_keeps_its_months_inside_the_folder_of_the_cache()
     {
@@ -395,6 +424,13 @@ public sealed class FileHistoryMonthStoreTests
         {
             scratch.Delete(recursive: true);
         }
+    }
+
+    // The kind a file of the cache writes after its mark and the number of its format.
+    private static byte KindIn(string path)
+    {
+        byte[] bytes = Decompress(File.ReadAllBytes(path));
+        return bytes[FileHistoryMonthStore.Mark.Length + sizeof(int)];
     }
 
     private FileHistoryMonthStore Store(long maxBytes = Unlimited)

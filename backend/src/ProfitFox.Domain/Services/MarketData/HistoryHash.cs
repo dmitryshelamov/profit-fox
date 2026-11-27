@@ -34,6 +34,20 @@ public sealed class HistoryHash : IDisposable
         }
     }
 
+    /// <summary>
+    ///     The points of open interest of a read (change add-idea-score, spec market-history «Граф с узлом OI»): read only for a
+    ///     graph with the node «OI», so the hash of a run without it is the one it was.
+    /// </summary>
+    public void Add(string instrumentId, HistoryRead<OpenInterestPoint> read)
+    {
+        Line("open-interest", instrumentId);
+        AddCoverage(read.Coverage);
+        foreach (OpenInterestPoint point in read.Items)
+        {
+            Line(Ticks(point.Time), point.Value.ToString(CultureInfo.InvariantCulture));
+        }
+    }
+
     public string Result()
     {
         return Convert.ToHexStringLower(_hash.GetCurrentHash());

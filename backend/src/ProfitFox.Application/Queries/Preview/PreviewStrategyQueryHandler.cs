@@ -95,7 +95,8 @@ internal sealed class PreviewStrategyQueryHandler(
         }
 
         DateTimeOffset end = PreviewPeriod.End(time.GetUtcNow());
-        PreviewHistory history = await cache.Get(pair.Id, timeframe, end, () => PreviewHistory.ReadAsync(source, pair.Id, timeframe, end, time), cancellationToken);
+        bool openInterest = GraphNeeds.OpenInterest(strategy.Graph);
+        PreviewHistory history = await cache.Get(pair.Id, timeframe, end, () => PreviewHistory.ReadAsync(source, pair.Id, timeframe, end, time, openInterest), cancellationToken, openInterest);
         IReadOnlyDictionary<string, IReadOnlyList<HistoryCandle>>? named = await PreviewHistory.NamedAsync(
             StrategyGraph.NamedPairs(strategy.Graph),
             pairs,
@@ -136,7 +137,7 @@ internal sealed class PreviewStrategyQueryHandler(
         TradeCosts costs,
         CancellationToken cancellationToken)
     {
-        var steps = PairSteps.Of(strategy, timeframe, pair.Symbol, history.Candles.Items, history.Funding.Items, named);
+        var steps = PairSteps.Of(strategy, timeframe, pair.Symbol, history.Candles.Items, history.Funding.Items, named, history.Points);
         var orders = new PairOrders(steps, HistoryPeriod.DataStart, end, costs);
         foreach (long week in orders.Weeks)
         {
@@ -172,7 +173,8 @@ internal sealed class PreviewStrategyQueryHandler(
             to,
             costs,
             cancellationToken,
-            named);
+            named,
+            history.Points);
         return (result.Orders, result.Cycles, from);
     }
 

@@ -85,6 +85,11 @@ public sealed class MemoryIdeaRepository : IIdeaRepository
         throw new NotSupportedException("The summary is that of the database.");
     }
 
+    public Task<IReadOnlyList<IdeaScoreRow>> ScoresAsync(IdeaListQuery query, CancellationToken cancellationToken)
+    {
+        throw new NotSupportedException("The outcomes by score are those of the database.");
+    }
+
     public Task<(int Open, int Closed)> CountsAsync(CancellationToken cancellationToken)
     {
         return Task.FromResult((Ideas.Count(idea => idea.State == IdeaState.Open), Ideas.Count(idea => idea.State == IdeaState.Closed)));
@@ -209,6 +214,11 @@ public sealed class FakeRecentHistory : IRecentHistory
     public HashSet<string> Loading { get; } = [];
 
     /// <summary>
+    ///     The points of open interest a test gives each pair by its id (change add-idea-score).
+    /// </summary>
+    public Dictionary<string, List<OpenInterestPoint>> Points { get; } = [];
+
+    /// <summary>
     ///     The ids of the pairs whose candles the service refuses, with the message of the refusal (task 18.3).
     /// </summary>
     public Dictionary<string, string> Failing { get; } = [];
@@ -223,6 +233,12 @@ public sealed class FakeRecentHistory : IRecentHistory
     ///     The ids of the pairs whose candles the service refuses with this exception (task 19.4).
     /// </summary>
     public Dictionary<string, Exception> Refusing { get; } = [];
+
+    /// <summary>
+    ///     The ids of the pairs whose points of open interest the service refuses with this exception (change add-idea-score,
+    ///     task 8.6); their candles still come.
+    /// </summary>
+    public Dictionary<string, Exception> OpenInterestRefusing { get; } = [];
 
     public List<string> Asked { get; } = [];
 
@@ -268,6 +284,37 @@ public sealed class FakeRecentHistory : IRecentHistory
     public Task<RecentRead<OpenInterestPoint>> OpenInterest(string instrumentId, TimeSpan interval, DateTimeOffset before, int limit, CancellationToken cancellation, IReadSteps? steps = null)
     {
         return Task.FromResult(new RecentRead<OpenInterestPoint>(false, []));
+    }
+
+    // The last point of each interval of the window with its own time, as the service gives them (change add-idea-score).
+    public Task<RecentRead<OpenInterestPoint>> OpenInterestPoints(string instrumentId, TimeSpan interval, DateTimeOffset before, int count, CancellationToken cancellation)
+    {
+        lock (Asked)
+        {
+            Asked.Add($"open-interest {instrumentId}");
+        }
+
+        if (Loading.Contains(instrumentId))
+        {
+            return Task.FromResult(RecentRead<OpenInterestPoint>.StillLoading);
+        }
+
+        if (OpenInterestRefusing.TryGetValue(instrumentId, out Exception? refusal))
+        {
+            throw refusal;
+        }
+
+        long step = interval.Ticks;
+        var to = new DateTimeOffset(before.UtcTicks / step * step, TimeSpan.Zero);
+        DateTimeOffset from = to - (interval * count);
+        IEnumerable<OpenInterestPoint> points = Points.GetValueOrDefault(instrumentId) ?? [];
+        return Task.FromResult(new RecentRead<OpenInterestPoint>(false, [
+            .. points
+                .Where(point => point.Time >= from && point.Time < to)
+                .GroupBy(point => point.Time.UtcTicks / step)
+                .Select(group => group.MaxBy(point => point.Time)!)
+                .OrderBy(point => point.Time)
+        ]));
     }
 }
 

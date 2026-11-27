@@ -9,6 +9,11 @@ namespace ProfitFox.Application.Queries.Ideas;
 public sealed record IdeaListResult(ListPage<Idea> Page, bool FilterGone);
 
 /// <summary>
+///     The outcomes by score, and whether the saved filter asked for is gone.
+/// </summary>
+public sealed record IdeaScoresResult(IReadOnlyList<IdeaScoreRow> Rows, bool FilterGone);
+
+/// <summary>
 ///     A page of the summary of the journal, and whether the saved filter asked for is gone.
 /// </summary>
 public sealed record IdeaSummaryResult(ListPage<IdeaSummary> Page, bool FilterGone);

@@ -24,6 +24,11 @@ internal sealed class RepeatingHistorySource(IHistorySource source, HistoryRepea
         return Repeat(instrumentId, () => source.ReadFunding(instrumentId, from, to, cancellation), cancellation);
     }
 
+    public Task<HistoryRead<OpenInterestPoint>> ReadOpenInterest(string instrumentId, DateTimeOffset from, DateTimeOffset to, CancellationToken cancellation)
+    {
+        return Repeat(instrumentId, () => source.ReadOpenInterest(instrumentId, from, to, cancellation), cancellation);
+    }
+
     private async Task<T> Repeat<T>(string instrumentId, Func<Task<T>> read, CancellationToken cancellation)
     {
         for (int repeat = 0; ; repeat++)

@@ -19,6 +19,12 @@ public interface IHistoryMonthStore
     Task<HistoryRead<HistoryPayment>?> ReadFunding(HistoryMonth month, CancellationToken cancellation);
 
     /// <summary>
+    ///     The points of open interest of the month with its coverage, as they were saved; null when the store has no such
+    ///     month (change add-idea-score).
+    /// </summary>
+    Task<HistoryRead<OpenInterestPoint>?> ReadOpenInterest(HistoryMonth month, CancellationToken cancellation);
+
+    /// <summary>
     ///     Keeps the candles of the month, replacing what was kept for it.
     /// </summary>
     Task SaveCandles(HistoryMonth month, HistoryRead<HistoryCandle> read, CancellationToken cancellation);
@@ -27,4 +33,9 @@ public interface IHistoryMonthStore
     ///     Keeps the funding payments of the month, replacing what was kept for it.
     /// </summary>
     Task SaveFunding(HistoryMonth month, HistoryRead<HistoryPayment> read, CancellationToken cancellation);
+
+    /// <summary>
+    ///     Keeps the points of open interest of the month, replacing what was kept for it.
+    /// </summary>
+    Task SaveOpenInterest(HistoryMonth month, HistoryRead<OpenInterestPoint> read, CancellationToken cancellation);
 }

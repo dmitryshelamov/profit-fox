@@ -5,7 +5,8 @@ namespace ProfitFox.Presentation.Contracts.Ideas;
 ///     (<c>long</c>, <c>short</c>), labels, moment and end of time in milliseconds, size, the entry it shows — the close of
 ///     its candle until the entry —, the stop and the target as fractions and in prices, the result now as a fraction, its
 ///     state (<c>open</c>, <c>closed</c>, <c>excluded</c>), the exit with its reason (<c>stop</c>, <c>target</c>,
-///     <c>time</c>), the outcome as a fraction and in USDT, and why an excluded idea is.
+///     <c>time</c>), the outcome as a fraction and in USDT, why an excluded idea is, and its score by the weights now (change
+///     add-idea-score; 0 outside the lists).
 /// </summary>
 public sealed record IdeaResponse(
     Guid Id,
@@ -32,4 +33,5 @@ public sealed record IdeaResponse(
     bool Ambiguous,
     double? Result,
     double? ResultUsdt,
-    string? Excluded);
+    string? Excluded,
+    int Score);

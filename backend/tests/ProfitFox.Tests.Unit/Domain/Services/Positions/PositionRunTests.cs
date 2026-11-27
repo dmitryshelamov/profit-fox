@@ -195,9 +195,9 @@ public sealed class PositionRunTests
     {
         var run = new PositionRun(Strategy(LimitBuy(""" "inputs": { "when": true, "price": 99, "size": 100 } """, "")), new Paths().Flat(100, 120).Build(withFunding: false), Free, Paths.Start);
 
-        run.Step(Hour(0), lastFunding: null);
+        run.Step(Hour(0), facts: null);
         StandingOrder first = run.Standing.Single();
-        run.Step(Hour(1), lastFunding: null);
+        run.Step(Hour(1), facts: null);
 
         Assert.That(run.Standing.Single(), Is.SameAs(first));
         Assert.That((first.Side, first.Price, first.Size), Is.EqualTo((FillSide.Buy, (double?)99, 100.0)));
@@ -209,9 +209,9 @@ public sealed class PositionRunTests
         string json = LimitBuy(""" "inputs": { "when": true, "size": 100 } """, """{ "from": "below.result", "to": "buy.price" }""", """{ "id": "c", "kind": "candle" }, { "id": "below", "kind": "multiply", "inputs": { "b": 0.99 } },""", """{ "from": "c.close", "to": "below.a" },""");
         var run = new PositionRun(Strategy(json), new Paths().Flat(100, 120).Build(withFunding: false), Free, Paths.Start);
 
-        run.Step(Hour(0, 100), lastFunding: null);
+        run.Step(Hour(0, 100), facts: null);
         StandingOrder first = run.Standing.Single();
-        run.Step(Hour(1, 99), lastFunding: null);
+        run.Step(Hour(1, 99), facts: null);
 
         Assert.That(first.Price, Is.EqualTo(99));
         Assert.That(run.Standing.Single(), Is.Not.SameAs(first));
@@ -224,9 +224,9 @@ public sealed class PositionRunTests
         string json = LimitBuy(""" "inputs": { "price": 90, "size": 100 } """, """{ "from": "high.result", "to": "buy.when" }""", """{ "id": "c", "kind": "candle" }, { "id": "high", "kind": "compare", "settings": { "operation": "gt" }, "inputs": { "b": 99.5 } },""", """{ "from": "c.close", "to": "high.a" },""");
         var run = new PositionRun(Strategy(json), new Paths().Flat(100, 120).Build(withFunding: false), Free, Paths.Start);
 
-        run.Step(Hour(0, 100), lastFunding: null);
+        run.Step(Hour(0, 100), facts: null);
         Assert.That(run.Standing, Has.Count.EqualTo(1));
-        run.Step(Hour(1, 99), lastFunding: null);
+        run.Step(Hour(1, 99), facts: null);
 
         Assert.That(run.Standing, Is.Empty);
     }
@@ -237,7 +237,7 @@ public sealed class PositionRunTests
         string json = LimitBuy(""" "inputs": { "when": true, "size": 100 } """, """{ "from": "prev.result", "to": "buy.price" }""", """{ "id": "c", "kind": "candle" }, { "id": "prev", "kind": "previous" },""", """{ "from": "c.close", "to": "prev.value" },""");
         var run = new PositionRun(Strategy(json), new Paths().Flat(100, 120).Build(withFunding: false), Free, Paths.Start);
 
-        run.Step(Hour(0, 100), lastFunding: null);
+        run.Step(Hour(0, 100), facts: null);
 
         Assert.That(run.Standing, Is.Empty);
     }
@@ -247,7 +247,7 @@ public sealed class PositionRunTests
     {
         var run = new PositionRun(Strategy(Graphs.Ladder), new Paths().Flat(100, 60).Build(withFunding: false), Free, Paths.Start);
 
-        run.Step(Hour(0), lastFunding: null);
+        run.Step(Hour(0), facts: null);
         run.Advance(Paths.At(1));
 
         StandingOrder sell = run.Standing.Single(order => order.Node == "sell");
@@ -285,7 +285,7 @@ public sealed class PositionRunTests
             $$"""{{Into("never")}}, {{Into("out")}}""");
         var run = new PositionRun(Strategy(json), new Paths().Flat(100, 60).Build(withFunding: false), Free, Paths.Start);
 
-        run.Step(Hour(0), lastFunding: null);
+        run.Step(Hour(0), facts: null);
 
         Assert.That(run.Standing, Is.Empty);
     }
@@ -710,7 +710,7 @@ public sealed class PositionRunTests
 
         var watch = System.Diagnostics.Stopwatch.StartNew();
         var run = new PositionRun(strategy, path, Free, Paths.Start);
-        run.Step(Hour(0), lastFunding: null);
+        run.Step(Hour(0), facts: null);
         PositionResult result = run.Finish(Paths.At(20_000));
         watch.Stop();
 
@@ -724,7 +724,7 @@ public sealed class PositionRunTests
     {
         using var cancellation = new CancellationTokenSource();
         var run = new PositionRun(Strategy(Graphs.Ladder), new Paths().Flat(100, 120).Build(withFunding: false), Free, Paths.Start, cancellationToken: cancellation.Token);
-        run.Step(Hour(0), lastFunding: null);
+        run.Step(Hour(0), facts: null);
         run.Advance(Paths.At(30));
 
         cancellation.Cancel();

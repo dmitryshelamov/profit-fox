@@ -80,7 +80,7 @@ public sealed class V2LabelsTests
         var executor = new SignalExecutor(Signal(PairDayDrop));
         var day = TimeSpan.FromDays(1);
 
-        bool?[] values = [.. new decimal[] { 100, 94, 96, 91.2m }.Select((close, index) => executor.Value("SOLUSDT", Candle(Monday + (index * day), day, close), lastFunding: null))];
+        bool?[] values = [.. new decimal[] { 100, 94, 96, 91.2m }.Select((close, index) => executor.Value("SOLUSDT", Candle(Monday + (index * day), day, close), facts: null))];
 
         Assert.That(values, Is.EqualTo(new bool?[] { null, true, false, true }), "94 ≤ 95 % of 100; 96 > 95 % of 94; 91.2 = 95 % of 96");
     }
@@ -98,7 +98,7 @@ public sealed class V2LabelsTests
             {
                 DateTimeOffset open = Monday + (index * fourHours);
                 var pairs = new Dictionary<string, ClosedCandle> { ["BTCUSDT"] = Candle(open, fourHours, close) };
-                return executor.Value("SOLUSDT", Candle(open, fourHours, 238), lastFunding: null, pairs);
+                return executor.Value("SOLUSDT", Candle(open, fourHours, 238), facts: null, pairs);
             })
         ];
 

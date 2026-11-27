@@ -6,6 +6,7 @@ using ProfitFox.Domain.Repositories;
 using ProfitFox.Domain.ValueObjects.Ideas;
 using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Ideas.Queries;
+using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Scoring;
 
 namespace ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Ideas;
 
@@ -24,15 +25,30 @@ internal sealed class SignalLabelRepository(NpgsqlDataSource database) : ISignal
         return row?.ToDomain();
     }
 
+    // The weights of the label go to its new text in the same transaction, and the ideas of both texts get their scores again
+    // (change add-idea-score, design.md, decisions 1 and 2); a label turned off or on with the same text keeps them.
     public async Task<bool> SetAsync(SignalLabel label, CancellationToken cancellationToken)
     {
         await using NpgsqlConnection connection = await database.OpenConnectionAsync(cancellationToken);
+        await using NpgsqlTransaction transaction = await connection.BeginTransactionAsync(cancellationToken);
         try
         {
+            string? before = await connection.ExecuteScalarAsync<string?>(new CommandDefinition(
+                SignalLabelRepositoryQueries.TextOf,
+                new { label.SignalId },
+                transaction,
+                cancellationToken: cancellationToken));
             await connection.ExecuteAsync(new CommandDefinition(
                 SignalLabelRepositoryQueries.Set,
                 new { label.SignalId, label.Enabled, label.Text, Timeframe = Timeframes.Name(label.Timeframe) },
+                transaction,
                 cancellationToken: cancellationToken));
+            if (before is not null && before != label.Text)
+            {
+                await LabelWeightRepository.MoveAsync(connection, transaction, before, label.Text, cancellationToken);
+            }
+
+            await transaction.CommitAsync(cancellationToken);
             return true;
         }
         catch (PostgresException exception) when (exception.SqlState == UniqueViolation)

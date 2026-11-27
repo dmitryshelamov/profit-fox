@@ -20,7 +20,7 @@ public sealed class GraphRun
     private readonly PinValue[] _nodeOutputs;
     private readonly PinValue[] _outputs;
     private ClosedCandle? _lastCandle;
-    private FundingPayment? _lastFunding;
+    private CandleFacts _lastFacts;
     private IReadOnlyDictionary<string, ClosedCandle>? _lastPairs;
 
     public GraphRun(GraphDefinition graph)
@@ -40,14 +40,15 @@ public sealed class GraphRun
 
     /// <summary>
     ///     Computes the graph at the close of <paramref name="candle" /> and gives its declared outputs in their order.
-    ///     <paramref name="lastFunding" /> is the last payment paid by that close, or null before the first one;
+    ///     <paramref name="facts" /> are the last payment paid by that close and the last point of open interest before it,
+    ///     each null before the first one;
     ///     <paramref name="position" /> is the state of the position at the close, closed when not given;
     ///     <paramref name="pairs" /> are the closed candles of the pairs the graph names (<c>pair-candle</c>), by symbol,
     ///     none when not given. The memory of the nodes moves to this candle. The returned list is reused by the next call.
     /// </summary>
     public IReadOnlyList<PinValue> Step(
         ClosedCandle candle,
-        FundingPayment? lastFunding,
+        CandleFacts facts,
         PositionState? position = null,
         IReadOnlyDictionary<string, ClosedCandle>? pairs = null)
     {
@@ -58,15 +59,20 @@ public sealed class GraphRun
                 nameof(candle));
         }
 
-        if (lastFunding is not null && lastFunding.Time > candle.CloseTime)
+        if (facts.Funding is { } funding && funding.Time > candle.CloseTime)
         {
-            throw new ArgumentException($"A payment at {lastFunding.Time:O} is not known at the close {candle.CloseTime:O}.", nameof(lastFunding));
+            throw new ArgumentException($"A payment at {funding.Time:O} is not known at the close {candle.CloseTime:O}.", nameof(facts));
+        }
+
+        if (facts.OpenInterest is { } point && point.Time >= candle.CloseTime)
+        {
+            throw new ArgumentException($"A point of open interest at {point.Time:O} is not known at the close {candle.CloseTime:O}.", nameof(facts));
         }
 
         _lastCandle = candle;
-        _lastFunding = lastFunding;
+        _lastFacts = facts;
         _lastPairs = pairs;
-        return Compute(new NodeContext(candle, lastFunding, candle.CloseTime, position ?? PositionState.Closed, Commit: true, pairs));
+        return Compute(new NodeContext(candle, facts.Funding, candle.CloseTime, position ?? PositionState.Closed, Commit: true, pairs, facts.OpenInterest));
     }
 
     /// <summary>
@@ -86,7 +92,7 @@ public sealed class GraphRun
             throw new ArgumentException($"A fill at {moment:O} comes after the close {candle.CloseTime:O}.", nameof(moment));
         }
 
-        return Compute(new NodeContext(candle, _lastFunding, moment, position, Commit: false, _lastPairs));
+        return Compute(new NodeContext(candle, _lastFacts.Funding, moment, position, Commit: false, _lastPairs, _lastFacts.OpenInterest));
     }
 
     private IReadOnlyList<PinValue> Compute(NodeContext context)

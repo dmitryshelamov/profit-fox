@@ -33,9 +33,9 @@ internal sealed class StrategyRun
         _target = Input(graph, node => node.Definition.Kind == NodeCatalog.TakeProfit, NodeCatalog.Distance);
     }
 
-    public StrategyStep Step(ClosedCandle candle, FundingPayment? lastFunding, IReadOnlyDictionary<string, ClosedCandle>? pairs = null)
+    public StrategyStep Step(ClosedCandle candle, CandleFacts facts, IReadOnlyDictionary<string, ClosedCandle>? pairs = null)
     {
-        _run.Step(candle, lastFunding, position: null, pairs);
+        _run.Step(candle, facts, position: null, pairs);
 
         (EntrySide? side, decimal? size, string? node) = Entry();
         return Read(candle.CloseTime, side) with { Size = side is null ? FirstSize() : size, Node = node };
