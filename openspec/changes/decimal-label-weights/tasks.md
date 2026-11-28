@@ -58,9 +58,9 @@ typecheck`, `npm run lint`, `npm run format:check`, `npm run build`. Кажда�
 
 ## 5. Проверка
 
-- [ ] 5.1 Все тесты бэкенда и фронтенда, typecheck, lint, format:check, build; `openspec validate decimal-label-weights
+- [x] 5.1 Все тесты бэкенда и фронтенда, typecheck, lint, format:check, build; `openspec validate decimal-label-weights
   --strict`. Записать числа в «Итог».
-- [ ] 5.2 Dev-стенд: поставить метке вес `0.25`, увидеть балл идеи с этой меткой, «Балл от 0.25», итоги «от 0 до
+- [x] 5.2 Dev-стенд: поставить метке вес `0.25`, увидеть балл идеи с этой меткой, «Балл от 0.25», итоги «от 0 до
   +0.5». Снимок «Скоринга» — `screens/scoring.jpg`.
 
 ## База
@@ -101,7 +101,15 @@ Postgres 17 в Docker).
 - Фронтенд: 486 тестов в 39 файлах прошли (было 478); typecheck, lint, format:check, build зелёные.
 - `openspec validate decimal-label-weights --strict`: valid.
 - `dotnet build ProfitFox.slnx --configuration Release`: 0 предупреждений, 0 ошибок.
-- Бэкенд: прогон идёт.
+- Бэкенд: Unit 940 прошли (было 927), Integration 505 прошли (было 498), 0 упавших.
+- SHA-256 `/openapi/v1.json`: `3d086fd56551645f4f0c8c808edef7160441a5343d6cccec79f70ae55302921a` (было
+  `8d3dd9a4…`): веса и балл `double` вместо `int32`, строка итогов `from`/`to` вместо `score`; `schema.d.ts`
+  пересобран из него.
+- Dev-стенд (5.2): вес лонга «цена ↓ 15m» `0.25` сохранён через поле (Enter), вес шорта `−0.5` — уходом из поля;
+  `0.125` — отказ с ошибкой в строке и прежним весом. Открытые идеи с меткой — балл `+0.25`; «Балл от 0.25» — 5 000
+  открытых идей, все с баллом `0.25`. Итоги за всё время — «от 0 до +0.5». После веса «⚡ всплеск» (лонг `1`, шорт
+  `−0.5`) — «от +1 до +1.5», «от 0 до +0.5», «от −0.5 до 0»; `ideas.score = ScoreOf` у всех 500 000 идей. Снимок —
+  `screens/scoring.jpg`.
 
 ## Открыто после применения
 
