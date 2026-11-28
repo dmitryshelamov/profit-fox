@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text.Json;
 
 using Bybit.Net;
 using Bybit.Net.Clients;
@@ -21,8 +22,8 @@ namespace ProfitFox.Infrastructure.Clients.Bybit;
 
 /// <summary>
 ///     The private calls of Bybit v5 with the key of an account (change add-exchange-accounts, design.md, decisions 4, 6 and
-///     7): <c>/v5/user/query-api</c> for what the key may do and <c>/v5/account/wallet-balance</c> for the free money, in the
-///     cross and in the isolated margin. A
+///     7): <c>/v5/user/query-api</c> for what the key may do, <c>/v5/account/wallet-balance</c> for the free money, in the
+///     cross and in the isolated margin, and <c>/v5/account/info</c> for the margin mode (decision 11). A
 ///     client of <c>Bybit.Net</c> is built over the typed <see cref="HttpClient" /> for each call with the key of that call and
 ///     dropped with it, so the secret stays in no cache. One attempt per call: the owner waits for the answer.
 /// </summary>
@@ -59,6 +60,40 @@ internal sealed class BybitAccountClient(HttpClient http, BybitSettings settings
         return Free(balances.List.SingleOrDefault());
     }
 
+    public async Task<string?> MarginModeAsync(string apiKey, string secret, CancellationToken cancellationToken)
+    {
+        // The package reads marginMode into an enum of the three modes it knows; the mode is taken from the answer as Bybit
+        // wrote it, so a new one is kept (design.md, decision 11). Only this client keeps the answer: it has no secret.
+        using BybitRestClient client = Client(apiKey, secret, original: true);
+        HttpResult<BybitAccountInfo> result = await client.V5Api.Account.GetMarginAccountInfoAsync(cancellationToken);
+        if (!result.Success && result.Error?.ErrorType is ErrorType.DeserializationFailed && result.OriginalData is { } unread)
+        {
+            return MarginMode(unread);
+        }
+
+        BybitAccountInfo info = Unwrap("account-info", result);
+        return result.OriginalData is { } original ? MarginMode(original) : info.MarginMode switch
+        {
+            global::Bybit.Net.Enums.MarginMode.IsolatedMargin => "ISOLATED_MARGIN",
+            global::Bybit.Net.Enums.MarginMode.RegularMargin => "REGULAR_MARGIN",
+            global::Bybit.Net.Enums.MarginMode.PortfolioMargin => "PORTFOLIO_MARGIN",
+            _ => null
+        };
+    }
+
+    // The field result.marginMode of an answer of account/info; null when it is not there or empty.
+    private static string? MarginMode(string answer)
+    {
+        using var document = JsonDocument.Parse(answer);
+        return document.RootElement.TryGetProperty("result", out JsonElement result)
+               && result.ValueKind == JsonValueKind.Object
+               && result.TryGetProperty("marginMode", out JsonElement mode)
+               && mode.ValueKind == JsonValueKind.String
+               && mode.GetString() is { Length: > 0 } text
+            ? text
+            : null;
+    }
+
     /// <summary>
     ///     The free money of the unified wallet (design.md, decision 7): the available balance of the whole account when Bybit
     ///     sends it — the cross and portfolio margin. In the isolated margin Bybit sends the fields of the whole account empty,
@@ -90,12 +125,12 @@ internal sealed class BybitAccountClient(HttpClient http, BybitSettings settings
         return balance - (usdt.TotalPositionInitialMargin ?? 0m) - (usdt.TotalOrderInitialMargin ?? 0m) - (usdt.Locked ?? 0m) - (usdt.Bonus ?? 0m);
     }
 
-    private BybitRestClient Client(string apiKey, string secret)
+    private BybitRestClient Client(string apiKey, string secret, bool original = false)
     {
         return new BybitRestClient(
             http,
             NullLoggerFactory.Instance,
-            Options.Create(new BybitRestOptions { ApiCredentials = new BybitCredentials(apiKey, secret), Environment = settings.Environment() }));
+            Options.Create(new BybitRestOptions { ApiCredentials = new BybitCredentials(apiKey, secret), Environment = settings.Environment(), OutputOriginalData = original }));
     }
 
     /// <summary>

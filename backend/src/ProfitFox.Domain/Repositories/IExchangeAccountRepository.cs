@@ -28,6 +28,11 @@ public interface IExchangeAccountRepository
     Task<bool> RenameAsync(Guid id, string name, CancellationToken cancellationToken);
 
     /// <summary>
+    ///     Keeps the margin mode Bybit named now in place of the one before; false when there is no account.
+    /// </summary>
+    Task<bool> SetMarginModeAsync(Guid id, string? marginMode, CancellationToken cancellationToken);
+
+    /// <summary>
     ///     Removes the account with its secret; false when there was none.
     /// </summary>
     Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken);

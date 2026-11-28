@@ -216,6 +216,50 @@ public sealed class BybitAccountClientTests
         Assert.That(refused!.Message, Is.EqualTo("Bybit не прислал свободные деньги аккаунта"));
     }
 
+    // Design.md, decision 11: the margin mode of the unified account at /v5/account/info, as Bybit names it.
+    [TestCase("ISOLATED_MARGIN")]
+    [TestCase("REGULAR_MARGIN")]
+    [TestCase("PORTFOLIO_MARGIN")]
+    public async Task The_margin_mode_is_read_at_account_info_as_Bybit_names_it(string mode)
+    {
+        _bybit.Json(AccountInfo($"\"{mode}\""));
+
+        string? read = await Client().MarginModeAsync(Key, Secret, CancellationToken.None);
+
+        Assert.That(read, Is.EqualTo(mode));
+        (Uri uri, Dictionary<string, string> headers) = _bybit.Requests.Single();
+        Assert.That(uri.AbsolutePath, Is.EqualTo("/v5/account/info"));
+        Assert.That(headers["X-BAPI-API-KEY"], Is.EqualTo(Key));
+    }
+
+    // Spec exchange-accounts «Неизвестный режим»: a mode Bybit.Net does not know is kept as Bybit sent it.
+    [Test]
+    public async Task A_margin_mode_the_package_does_not_know_is_kept_as_Bybit_sent_it()
+    {
+        _bybit.Json(AccountInfo("\"FUTURE_MARGIN\""));
+
+        Assert.That(await Client().MarginModeAsync(Key, Secret, CancellationToken.None), Is.EqualTo("FUTURE_MARGIN"));
+    }
+
+    [TestCase("\"\"")]
+    [TestCase(null)]
+    public async Task No_margin_mode_in_the_answer_is_none(string? mode)
+    {
+        _bybit.Json(AccountInfo(mode));
+
+        Assert.That(await Client().MarginModeAsync(Key, Secret, CancellationToken.None), Is.Null);
+    }
+
+    [Test]
+    public void The_margin_mode_of_a_rejected_key_is_rejected_with_the_reason_of_Bybit()
+    {
+        _bybit.Json(Error(10003, "API key is invalid."));
+
+        ExchangeKeyRejectedException? rejected = Assert.ThrowsAsync<ExchangeKeyRejectedException>(() => Client().MarginModeAsync(Key, Secret, CancellationToken.None));
+
+        Assert.That(rejected!.Message, Is.EqualTo("API key is invalid."));
+    }
+
     // Spec exchange-accounts «Ключ больше не действует».
     [Test]
     public void The_balance_of_a_rejected_key_is_rejected_with_the_reason_of_Bybit()
@@ -268,6 +312,16 @@ public sealed class BybitAccountClientTests
                  {"coin":"{{coin}}","equity":"{{wallet}}","usdValue":"","walletBalance":"{{wallet}}","free":"","locked":"{{locked}}",
                  "borrowAmount":"0","availableToWithdraw":"","accruedInterest":"0","totalOrderIM":"{{orderIm}}","totalPositionIM":"{{positionIm}}",
                  "totalPositionMM":"","unrealisedPnl":"0","cumRealisedPnl":"0","bonus":"{{bonus}}","marginCollateral":true,"collateralSwitch":true}
+                 """;
+    }
+
+    // An answer of account/info with the margin mode written as given — a JSON string — or without the field when null.
+    private static string AccountInfo(string? mode)
+    {
+        string field = mode is null ? "" : $"\"marginMode\":{mode},";
+        return $$"""
+                 {"retCode":0,"retMsg":"OK","result":{{{field}}"updatedTime":"1732788000000","unifiedMarginStatus":5,"dcpStatus":"OFF",
+                 "timeWindow":10,"smpGroup":0,"isMasterTrader":false,"spotHedgingStatus":"OFF"},"retExtInfo":{},"time":1732788000000}
                  """;
     }
 

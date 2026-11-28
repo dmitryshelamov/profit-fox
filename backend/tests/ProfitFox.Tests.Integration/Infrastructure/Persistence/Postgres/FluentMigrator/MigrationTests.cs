@@ -63,7 +63,7 @@ public sealed class MigrationTests
 
         await using var connection = new NpgsqlConnection(connectionString);
         long[] versions = [.. await connection.QueryAsync<long>("SELECT \"Version\" FROM \"VersionInfo\" ORDER BY \"Version\"")];
-        Assert.That(versions, Is.EqualTo(new[] { 202611200001L, 202611210001L, 202611220001L, 202611220002L, 202611230001L, 202611230002L, 202611230003L, 202611230004L, 202611250001L, 202611250002L, 202611270001L, 202611280001L, 202611280002L, 202611280003L }));
+        Assert.That(versions, Is.EqualTo(new[] { 202611200001L, 202611210001L, 202611220001L, 202611220002L, 202611230001L, 202611230002L, 202611230003L, 202611230004L, 202611250001L, 202611250002L, 202611270001L, 202611280001L, 202611280002L, 202611280003L, 202611280004L }));
         Assert.That(await TablesOf(connectionString), Is.SupersetOf(new[] { "strategies", "strategy_versions", "strategy_signals" }));
     }
 
@@ -410,7 +410,8 @@ public sealed class MigrationTests
             {
                 "exchange_accounts.id:uuid:NO", "exchange_accounts.name:text:NO", "exchange_accounts.api_key:text:NO",
                 "exchange_accounts.secret_nonce:bytea:NO", "exchange_accounts.secret_ciphertext:bytea:NO", "exchange_accounts.secret_tag:bytea:NO",
-                "exchange_accounts.uid:bigint:NO", "exchange_accounts.created_at:timestamp with time zone:NO"
+                "exchange_accounts.uid:bigint:NO", "exchange_accounts.created_at:timestamp with time zone:NO",
+                "exchange_accounts.margin_mode:text:YES"
             }));
         Assert.That(
             await connection.QueryAsync<string>("SELECT indexdef FROM pg_indexes WHERE tablename = 'exchange_accounts' AND indexname LIKE '%_ux' ORDER BY indexname"),
@@ -423,6 +424,34 @@ public sealed class MigrationTests
         runner.MigrateDown(202611280002);
 
         Assert.That(await TablesOf(connectionString), Is.EqualTo(Tables.Except(AccountTables).ToArray()));
+    }
+
+    /// <summary>
+    ///     Change add-exchange-accounts, task 3.3 (design.md, decision 11): the margin mode of an account is a column that may be
+    ///     empty, an account of before keeps none; Down removes only the column and keeps the accounts.
+    /// </summary>
+    [Test]
+    public async Task The_margin_mode_is_a_column_that_may_be_empty_and_down_removes_only_it()
+    {
+        string connectionString = await BenchDatabase.NewDatabase();
+        await using var connection = new NpgsqlConnection(connectionString);
+        var registrations = new ServiceCollection();
+        PostgresRegistrar.Configure(BenchDatabase.Settings(connectionString), registrations);
+        await using ServiceProvider services = registrations.BuildServiceProvider();
+        using IServiceScope scope = services.CreateScope();
+        IMigrationRunner runner = scope.ServiceProvider.GetRequiredService<IMigrationRunner>();
+        runner.MigrateUp(202611280003);
+        await connection.ExecuteAsync("INSERT INTO exchange_accounts VALUES (gen_random_uuid(), 'Основной', 'key', '\\x00', '\\x00', '\\x00', 104857321, now())");
+
+        runner.MigrateUp(202611280004);
+
+        Assert.That(await ColumnsOf(connection, ["exchange_accounts"]), Does.Contain("exchange_accounts.margin_mode:text:YES"));
+        Assert.That(await connection.ExecuteScalarAsync<string?>("SELECT margin_mode FROM exchange_accounts"), Is.Null);
+
+        runner.MigrateDown(202611280003);
+
+        Assert.That(await ColumnsOf(connection, ["exchange_accounts"]), Has.None.StartsWith("exchange_accounts.margin_mode:"));
+        Assert.That(await connection.ExecuteScalarAsync<long>("SELECT count(*) FROM exchange_accounts"), Is.EqualTo(1));
     }
 
     private static async Task<string[]> ColumnsOf(NpgsqlConnection connection, string[] tables)

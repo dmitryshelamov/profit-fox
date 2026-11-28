@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using ProfitFox.Application.Commands.Accounts.AddAccount;
 using ProfitFox.Application.Commands.Accounts.DeleteAccount;
 using ProfitFox.Application.Commands.Accounts.RenameAccount;
+using ProfitFox.Application.Contracts.Accounts;
 using ProfitFox.Application.Exceptions;
 using ProfitFox.Application.Queries.Accounts;
 using ProfitFox.Domain.Entities.Accounts;
@@ -73,12 +74,16 @@ public class AccountsController(ISender sender) : ControllerBase
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status503ServiceUnavailable)]
     public async Task<ActionResult<AccountBalanceResponse>> Balance(Guid id, CancellationToken cancellation)
     {
-        return await Answer<AccountBalanceResponse>(async () => new AccountBalanceResponse(await sender.Send(new GetAccountBalanceQuery(id), cancellation)));
+        return await Answer<AccountBalanceResponse>(async () =>
+        {
+            AccountBalanceInternal balance = await sender.Send(new GetAccountBalanceQuery(id), cancellation);
+            return new AccountBalanceResponse(balance.Free, balance.MarginMode);
+        });
     }
 
     private static AccountResponse Of(ExchangeAccount account)
     {
-        return new AccountResponse(account.Id, account.Name, account.Uid, account.ApiKey, account.CreatedAt);
+        return new AccountResponse(account.Id, account.Name, account.Uid, account.ApiKey, account.MarginMode, account.CreatedAt);
     }
 
     private async Task<ActionResult<T>> Answer<T>(Func<Task<ActionResult<T>>> act)

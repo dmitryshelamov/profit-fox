@@ -14,6 +14,7 @@ public sealed class FakeKeyInspector : IExchangeKeyInspector
 
     private readonly Dictionary<string, Func<ExchangeKeyInfo>> _keys = new(StringComparer.Ordinal);
     private readonly Dictionary<string, Func<decimal>> _free = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, Func<string?>> _modes = new(StringComparer.Ordinal);
 
     /// <summary>
     ///     The calls, as the method, the key and the secret they were made with.
@@ -53,6 +54,27 @@ public sealed class FakeKeyInspector : IExchangeKeyInspector
     {
         _free[apiKey] = () => throw refusal;
         return this;
+    }
+
+    /// <summary>
+    ///     The margin mode Bybit answers for the key, or the refusal it throws; none for a key it was not told of.
+    /// </summary>
+    public FakeKeyInspector Mode(string apiKey, string? mode)
+    {
+        _modes[apiKey] = () => mode;
+        return this;
+    }
+
+    public FakeKeyInspector Mode(string apiKey, Exception refusal)
+    {
+        _modes[apiKey] = () => throw refusal;
+        return this;
+    }
+
+    public Task<string?> MarginModeAsync(string apiKey, string secret, CancellationToken cancellationToken)
+    {
+        Calls.Add(("mode", apiKey, secret));
+        return Task.FromResult(_modes.TryGetValue(apiKey, out Func<string?>? mode) ? mode() : null);
     }
 
     public Task<ExchangeKeyInfo> InspectAsync(string apiKey, string secret, CancellationToken cancellationToken)

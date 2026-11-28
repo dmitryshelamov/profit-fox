@@ -10,6 +10,7 @@ import {
   deleteAccount,
   freeText,
   listAccounts,
+  marginModeText,
   renameAccount,
 } from '@/api/accounts';
 import type { RequestError } from '@/api/client';
@@ -32,16 +33,19 @@ type Asked =
 
 /**
  * «Аккаунты» (change add-exchange-accounts, spec exchange-accounts «Раздел «Аккаунты»»): the accounts of Bybit with the
- * permissions of their keys, the free money of each by its button, the menu of a row with a new name and the removal,
+ * permissions of their keys, the margin mode kept at the addition or at the last «Показать» (the list does not call
+ * Bybit), the free money of each by its button, the menu of a row with a new name and the removal,
  * and the dialog «Новый аккаунт». The secret never comes back from the server; a balance lives on the page until it is
  * left.
  */
 export function AccountsPage() {
+  const client = useQueryClient();
   const accounts = useQuery({ queryKey: accountsKey, queryFn: listAccounts });
   const [asked, setAsked] = useState<Asked | null>(null);
   const [balances, setBalances] = useState<Readonly<Record<string, Balance | 'loading'>>>({});
   const rows = accounts.data ?? [];
 
+  // The margin mode is read again with the balance and kept by the server: the row shows the one read now.
   const showBalance = async (account: Account) => {
     setBalances((old) => ({ ...old, [account.id]: 'loading' }));
     let balance: Balance;
@@ -52,6 +56,12 @@ export function AccountsPage() {
     }
 
     setBalances((old) => ({ ...old, [account.id]: balance }));
+    if (balance.ok) {
+      const marginMode = balance.marginMode;
+      client.setQueryData<Account[]>(accountsKey, (old) =>
+        old?.map((row) => (row.id === account.id ? { ...row, marginMode } : row)),
+      );
+    }
   };
 
   return (
@@ -92,7 +102,8 @@ export function AccountsPage() {
                 <Th className="w-[210px]">Имя</Th>
                 <Th className="w-[140px]">UID</Th>
                 <Th className="w-[250px]">Ключ API</Th>
-                <Th className="w-[240px]">Права ключа</Th>
+                <Th className="w-[200px]">Права ключа</Th>
+                <Th className="w-[140px]">Режим маржи</Th>
                 <Th className="w-[170px]">Свободно, USDT</Th>
                 <Th>Добавлен, {zoneLabel()}</Th>
                 <Th className="w-px">
@@ -107,6 +118,7 @@ export function AccountsPage() {
                   <Td className="font-mono text-muted">{String(account.uid)}</Td>
                   <Td className="font-mono">{account.apiKey}</Td>
                   <Td className="text-muted">{permissions}</Td>
+                  <Td className="text-muted">{marginModeText(account.marginMode)}</Td>
                   <Td>
                     <BalanceCell
                       account={account}

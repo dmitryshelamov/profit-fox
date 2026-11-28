@@ -108,6 +108,30 @@ public sealed class ExchangeAccountRepositoryTests
         Assert.That(await Add(Account("Старый", 104850011)), Is.True);
     }
 
+    // Change add-exchange-accounts, task 3.3 (design.md, decision 11): the margin mode is kept with the account, replaced by
+    // the one read later, and may be none.
+    [Test]
+    public async Task The_margin_mode_is_kept_replaced_and_may_be_none()
+    {
+        ExchangeAccount main = Account("Основной", 104857321) with { MarginMode = "ISOLATED_MARGIN" };
+        ExchangeAccount old = Account("Старый", 104850011);
+        await Add(main);
+        await Add(old);
+
+        Assert.That((await _accounts.FindAsync(main.Id, CancellationToken.None))!.MarginMode, Is.EqualTo("ISOLATED_MARGIN"));
+        Assert.That((await _accounts.FindAsync(old.Id, CancellationToken.None))!.MarginMode, Is.Null);
+
+        Assert.That(await _accounts.SetMarginModeAsync(main.Id, "REGULAR_MARGIN", CancellationToken.None), Is.True);
+        Assert.That(await _accounts.SetMarginModeAsync(old.Id, "FUTURE_MARGIN", CancellationToken.None), Is.True);
+        Assert.That(await _accounts.SetMarginModeAsync(Guid.NewGuid(), "REGULAR_MARGIN", CancellationToken.None), Is.False);
+
+        Assert.That(
+            (await _accounts.AllAsync(CancellationToken.None)).Select(account => (account.Name, account.MarginMode)),
+            Is.EquivalentTo(new[] { ("Основной", (string?)"REGULAR_MARGIN"), ("Старый", "FUTURE_MARGIN") }));
+        Assert.That(await _accounts.SetMarginModeAsync(main.Id, null, CancellationToken.None), Is.True);
+        Assert.That((await _accounts.FindAsync(main.Id, CancellationToken.None))!.MarginMode, Is.Null);
+    }
+
     private Task<bool> Add(ExchangeAccount account)
     {
         return _accounts.AddAsync(account, _protector.Protect(account.Id, Secret), CancellationToken.None);

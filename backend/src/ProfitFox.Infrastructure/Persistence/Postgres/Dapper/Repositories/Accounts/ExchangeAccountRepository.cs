@@ -18,7 +18,7 @@ internal sealed class ExchangeAccountRepository(NpgsqlDataSource database) : IEx
     private const string NameIndex = "exchange_accounts_name_ux";
     private const string UidIndex = "exchange_accounts_uid_ux";
 
-    private const string Columns = """id AS "Id", name AS "Name", uid AS "Uid", api_key AS "ApiKey", created_at AS "CreatedAt" """;
+    private const string Columns = """id AS "Id", name AS "Name", uid AS "Uid", api_key AS "ApiKey", created_at AS "CreatedAt", margin_mode AS "MarginMode" """;
 
     public async Task<IReadOnlyList<ExchangeAccount>> AllAsync(CancellationToken cancellationToken)
     {
@@ -40,10 +40,10 @@ internal sealed class ExchangeAccountRepository(NpgsqlDataSource database) : IEx
         {
             await connection.ExecuteAsync(new CommandDefinition(
                 """
-                INSERT INTO exchange_accounts (id, name, api_key, secret_nonce, secret_ciphertext, secret_tag, uid, created_at)
-                VALUES (@Id, @Name, @ApiKey, @Nonce, @Ciphertext, @Tag, @Uid, @CreatedAt)
+                INSERT INTO exchange_accounts (id, name, api_key, secret_nonce, secret_ciphertext, secret_tag, uid, created_at, margin_mode)
+                VALUES (@Id, @Name, @ApiKey, @Nonce, @Ciphertext, @Tag, @Uid, @CreatedAt, @MarginMode)
                 """,
-                new { account.Id, account.Name, account.ApiKey, secret.Nonce, secret.Ciphertext, secret.Tag, account.Uid, account.CreatedAt },
+                new { account.Id, account.Name, account.ApiKey, secret.Nonce, secret.Ciphertext, secret.Tag, account.Uid, account.CreatedAt, account.MarginMode },
                 cancellationToken: cancellationToken));
             return true;
         }
@@ -65,6 +65,12 @@ internal sealed class ExchangeAccountRepository(NpgsqlDataSource database) : IEx
         {
             return false;
         }
+    }
+
+    public async Task<bool> SetMarginModeAsync(Guid id, string? marginMode, CancellationToken cancellationToken)
+    {
+        await using NpgsqlConnection connection = await database.OpenConnectionAsync(cancellationToken);
+        return await connection.ExecuteAsync(new CommandDefinition("UPDATE exchange_accounts SET margin_mode = @MarginMode WHERE id = @Id", new { Id = id, MarginMode = marginMode }, cancellationToken: cancellationToken)) == 1;
     }
 
     public async Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken)
@@ -100,9 +106,11 @@ internal sealed class ExchangeAccountRepository(NpgsqlDataSource database) : IEx
 
         public DateTimeOffset CreatedAt { get; init; }
 
+        public string? MarginMode { get; init; }
+
         public ExchangeAccount ToDomain()
         {
-            return new ExchangeAccount(Id, Name, Uid, ApiKey, CreatedAt);
+            return new ExchangeAccount(Id, Name, Uid, ApiKey, CreatedAt, MarginMode);
         }
     }
 

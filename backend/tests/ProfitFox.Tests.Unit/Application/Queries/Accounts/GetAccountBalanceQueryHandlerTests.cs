@@ -1,3 +1,4 @@
+using ProfitFox.Application.Contracts.Accounts;
 using ProfitFox.Application.Exceptions;
 using ProfitFox.Application.Queries.Accounts;
 using ProfitFox.Domain.Entities.Accounts;
@@ -44,11 +45,11 @@ public sealed class GetAccountBalanceQueryHandlerTests
     {
         _bybit.Free("key-main", 1250.40m);
 
-        decimal free = await Balance(_main.Id);
+        AccountBalanceInternal balance = await Balance(_main.Id);
 
-        Assert.That(free, Is.EqualTo(1250.40m));
-        Assert.That(_bybit.Calls, Is.EqualTo(new[] { ("free", "key-main", "secret-main") }));
-        Assert.That(_accounts.Writes, Is.EqualTo(2), "only the two additions");
+        Assert.That(balance.Free, Is.EqualTo(1250.40m));
+        Assert.That(_bybit.Calls, Is.EqualTo(new[] { ("free", "key-main", "secret-main"), ("mode", "key-main", "secret-main") }));
+        Assert.That(_accounts.Writes, Is.EqualTo(3), "the two additions and the margin mode, no balance");
     }
 
     // Spec «Ключ больше не действует».
@@ -79,7 +80,31 @@ public sealed class GetAccountBalanceQueryHandlerTests
         Assert.ThrowsAsync<KeyNotFoundException>(() => Balance(Guid.NewGuid()));
     }
 
-    private Task<decimal> Balance(Guid id)
+    // Change add-exchange-accounts, task 5.5: spec «Режим обновлён по „Показать“».
+    [Test]
+    public async Task The_margin_mode_is_read_again_with_the_balance_and_kept_in_place_of_the_one_before()
+    {
+        await _accounts.SetMarginModeAsync(_main.Id, "ISOLATED_MARGIN", CancellationToken.None);
+        _bybit.Free("key-main", 10m).Mode("key-main", "REGULAR_MARGIN");
+
+        AccountBalanceInternal balance = await Balance(_main.Id);
+
+        Assert.That(balance, Is.EqualTo(new AccountBalanceInternal(10m, "REGULAR_MARGIN")));
+        Assert.That((await _accounts.FindAsync(_main.Id, CancellationToken.None))!.MarginMode, Is.EqualTo("REGULAR_MARGIN"));
+    }
+
+    [Test]
+    public async Task A_refused_margin_mode_keeps_the_one_before()
+    {
+        await _accounts.SetMarginModeAsync(_main.Id, "ISOLATED_MARGIN", CancellationToken.None);
+        _bybit.Free("key-main", 10m).Mode("key-main", new ExchangeUnavailableException("Bybit is unavailable"));
+
+        Assert.ThrowsAsync<ExchangeUnavailableException>(() => Balance(_main.Id));
+
+        Assert.That((await _accounts.FindAsync(_main.Id, CancellationToken.None))!.MarginMode, Is.EqualTo("ISOLATED_MARGIN"));
+    }
+
+    private Task<AccountBalanceInternal> Balance(Guid id)
     {
         return new GetAccountBalanceQueryHandler(_accounts, _bybit, _protector).Handle(new GetAccountBalanceQuery(id), CancellationToken.None);
     }

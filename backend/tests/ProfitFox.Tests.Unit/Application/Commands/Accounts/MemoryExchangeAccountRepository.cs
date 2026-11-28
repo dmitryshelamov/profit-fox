@@ -53,6 +53,19 @@ public sealed class MemoryExchangeAccountRepository : IExchangeAccountRepository
         return Task.FromResult(true);
     }
 
+    public Task<bool> SetMarginModeAsync(Guid id, string? marginMode, CancellationToken cancellationToken)
+    {
+        int index = _rows.FindIndex(row => row.Account.Id == id);
+        if (index < 0)
+        {
+            return Task.FromResult(false);
+        }
+
+        Writes++;
+        _rows[index] = (_rows[index].Account with { MarginMode = marginMode }, _rows[index].Secret);
+        return Task.FromResult(true);
+    }
+
     public Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken)
     {
         return Task.FromResult(_rows.RemoveAll(row => row.Account.Id == id) == 1);
