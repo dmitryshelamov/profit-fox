@@ -156,7 +156,13 @@ describe('the labels in the lists of ideas', () => {
     expect(within(labels).queryByText('⚡ всплеск')).toBeNull();
     expect(within(labels).queryByText('↓ BTC')).toBeNull();
     expect(within(labels).getByText('+2')).toBeInTheDocument();
-    expect(labels.firstElementChild).toHaveAttribute('title', '↑ funding, ⚡ всплеск, ↓ BTC');
+    await userEvent.hover(labels.firstElementChild!);
+    const hint = await screen.findByRole('tooltip');
+    expect(within(hint).getByText('↑ funding')).toBeInTheDocument();
+    expect(within(hint).getByText('⚡ всплеск')).toBeInTheDocument();
+    expect(within(hint).getByText('↓ BTC')).toBeInTheDocument();
+    await userEvent.unhover(labels.firstElementChild!);
+    expect(screen.queryByRole('tooltip')).toBeNull();
     const sol = screen.getByRole('row', { name: 'SOLUSDT breakout-long 1h' });
     expect(within(sol).getAllByRole('cell')[4]).toHaveTextContent('—');
   });

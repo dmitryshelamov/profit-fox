@@ -180,3 +180,69 @@ describe('the score in «Идеи»', () => {
     );
   });
 });
+
+// Change label-score-hint, spec idea-labels «Подсказка меток с весами»: the hint of the labels shows what each adds.
+describe('the hint of the labels of an idea', () => {
+  it('shows the score of the side, the weighted labels by what they add, and the rest in one line', async () => {
+    routes({
+      'GET /api/ideas': ideaPage([
+        idea({
+          side: 'long',
+          score: 1,
+          labels: ['OI ↓ 4h', 'волат.↑ 15m', 'цена ↓ 4h', '↓ BTC 1h'],
+        }),
+      ]),
+      'GET /api/scoring/labels': () =>
+        json([
+          {
+            text: 'цена ↓ 4h',
+            enabled: true,
+            timeframe: '4h',
+            signal: 'price-down-4h',
+            longWeight: 1,
+            shortWeight: -1,
+            builtIn: false,
+          },
+          {
+            text: '↓ BTC 1h',
+            enabled: true,
+            timeframe: '1h',
+            signal: 'btc-down-1h',
+            longWeight: -1,
+            shortWeight: 1,
+            builtIn: false,
+          },
+          {
+            text: 'OI ↓ 4h',
+            enabled: true,
+            timeframe: '4h',
+            signal: 'oi-down-4h',
+            longWeight: 1,
+            shortWeight: 0,
+            builtIn: false,
+          },
+          {
+            text: 'волат.↑ 15m',
+            enabled: true,
+            timeframe: '15m',
+            signal: 'vol-high-15m',
+            longWeight: 0,
+            shortWeight: 0,
+            builtIn: false,
+          },
+        ]),
+    });
+    renderApp('/ideas');
+    const row = await screen.findByRole('row', { name: 'SOLUSDT breakout-long 1h' });
+    const badges = within(row).getByText('OI ↓ 4h').parentElement!;
+    await userEvent.hover(badges);
+    const hint = await screen.findByRole('tooltip');
+    await waitFor(() => expect(hint).toHaveTextContent('Балл лонга+1'));
+    expect(
+      within(hint)
+        .getAllByRole('listitem')
+        .map((item) => item.textContent),
+    ).toEqual(['OI ↓ 4h+1', 'цена ↓ 4h+1', '↓ BTC 1h-1']);
+    expect(hint).toHaveTextContent('без веса (1): волат.↑ 15m');
+  });
+});

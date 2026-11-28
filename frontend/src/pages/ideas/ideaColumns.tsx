@@ -94,7 +94,7 @@ const labels: PagedColumn<Idea> = {
   key: 'labels',
   title: 'Метки',
   text: true,
-  cell: (idea) => <LabelBadges labels={idea.labels} />,
+  cell: (idea) => <LabelBadges labels={idea.labels} side={idea.side} />,
 };
 /**
  * The score of an idea by the weights now (change add-idea-score, spec idea-score «Балл в разделе «Идеи»»): its sign and
@@ -110,7 +110,7 @@ const score: PagedColumn<Idea> = {
 export const shownLabelsOfIdeas = 1;
 const fewLabels: PagedColumn<Idea> = {
   ...labels,
-  cell: (idea) => <LabelBadges labels={idea.labels} most={shownLabelsOfIdeas} />,
+  cell: (idea) => <LabelBadges labels={idea.labels} most={shownLabelsOfIdeas} side={idea.side} />,
 };
 const price = (key: 'stop' | 'target', title: string, tone: string): PagedColumn<Idea> => ({
   key,
