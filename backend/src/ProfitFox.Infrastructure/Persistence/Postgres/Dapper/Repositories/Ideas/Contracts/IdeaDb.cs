@@ -10,7 +10,7 @@ internal sealed class IdeaDb
     /// <summary>
     ///     The stored score, equal to the one by the weights now (design.md, decision 2).
     /// </summary>
-    public int Score { get; init; }
+    public decimal Score { get; init; }
 
     public Guid StrategyId { get; init; }
 

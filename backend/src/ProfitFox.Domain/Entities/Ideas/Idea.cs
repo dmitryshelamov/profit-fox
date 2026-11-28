@@ -48,11 +48,12 @@ public sealed class Idea
 
     /// <summary>
     ///     The score of the idea (change add-idea-score, spec idea-score «Балл идеи»): the sum of the weights of its labels by
-    ///     its side, by the weights now. The store keeps it with the idea and counts it again when the weights of one of its
+    ///     its side, by the weights now, a number with at most two digits after the point (change decimal-label-weights, design.md,
+    ///     decision 3). The store keeps it with the idea and counts it again when the weights of one of its
     ///     labels change (design.md, decision 2); it changes nothing of the idea, its plan or its outcome, and saving the idea
     ///     does not write it.
     /// </summary>
-    public int Score { get; init; }
+    public decimal Score { get; init; }
 
     public IdeaState State { get; set; } = IdeaState.Open;
 

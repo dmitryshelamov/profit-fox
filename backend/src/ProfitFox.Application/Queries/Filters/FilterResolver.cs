@@ -1,3 +1,5 @@
+using System.Globalization;
+
 using ProfitFox.Application.Contracts.Preview;
 using ProfitFox.Application.Exceptions;
 using ProfitFox.Domain.Entities.Filters;
@@ -82,18 +84,20 @@ internal static class FilterResolver
     }
 
     /// <summary>
-    ///     The least score a list is asked for (change add-idea-score, design.md, decision 3): a whole number, or none when not
+    ///     The least score a list is asked for (change add-idea-score, design.md, decision 3): a number with at most two digits
+    ///     after the point in the invariant culture (change decimal-label-weights, design.md, decision 3), or none when not
     ///     given; another value refuses the request at the field <c>minScore</c>.
     /// </summary>
-    public static int? MinScore(string? text)
+    public static decimal? MinScore(string? text)
     {
-        return MinScoreError(text, out int? score) is { } error ? throw new IdeasRequestException([error]) : score;
+        return MinScoreError(text, out decimal? score) is { } error ? throw new IdeasRequestException([error]) : score;
     }
 
     /// <summary>
-    ///     The error of the least score <paramref name="text" />, null for a whole number or none.
+    ///     The error of the least score <paramref name="text" />, null for a number with at most two digits after the point or
+    ///     none.
     /// </summary>
-    public static PreviewErrorInternal? MinScoreError(string? text, out int? score)
+    public static PreviewErrorInternal? MinScoreError(string? text, out decimal? score)
     {
         score = null;
         if (string.IsNullOrWhiteSpace(text))
@@ -101,13 +105,14 @@ internal static class FilterResolver
             return null;
         }
 
-        if (int.TryParse(text.Trim(), System.Globalization.NumberStyles.AllowLeadingSign, System.Globalization.CultureInfo.InvariantCulture, out int value))
+        if (decimal.TryParse(text.Trim(), NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out decimal value)
+            && value == decimal.Round(value, 2))
         {
             score = value;
             return null;
         }
 
-        return new PreviewErrorInternal("InvalidMinScore", "балл от — целое число") { Field = "minScore" };
+        return new PreviewErrorInternal("InvalidMinScore", "балл от — число, не больше двух знаков после точки") { Field = "minScore" };
     }
 
     public static IdeasRequestException Refused(IEnumerable<FilterProblem> problems)

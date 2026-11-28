@@ -1,3 +1,5 @@
+using System.Globalization;
+
 using ProfitFox.Application.Commands.Scoring.SetLabelWeight;
 using ProfitFox.Application.Exceptions;
 using ProfitFox.Application.Queries.Scoring;
@@ -8,8 +10,8 @@ using ProfitFox.Tests.Unit.Application.Services.Ideas;
 namespace ProfitFox.Tests.Unit.Application.Commands.Scoring;
 
 /// <summary>
-///     Change add-idea-score, task 2.3: spec idea-score «Вес метки» — the weights of a label and of «⚡ всплеск», the default
-///     of 0, and a weight out of range, not whole or of a text there is no label with refused without a change.
+///     Change add-idea-score, task 2.3, and change decimal-label-weights, task 2.2: spec idea-score «Вес метки» — the weights of a label and of «⚡ всплеск», the default
+///     of 0, and a weight out of range or of a text there is no label with refused without a change.
 /// </summary>
 public sealed class SetLabelWeightCommandHandlerTests
 {
@@ -45,26 +47,41 @@ public sealed class SetLabelWeightCommandHandlerTests
         Assert.That(rows.Single(label => label.Text == "↓ BTC 4h"), Is.EqualTo(row));
     }
 
-    [TestCase(4, 0, "longWeight")]
-    [TestCase(-4, 0, "longWeight")]
-    [TestCase(0, 7, "shortWeight")]
-    public async Task A_weight_out_of_range_is_refused_and_the_weights_stay(int longWeight, int shortWeight, string field)
+    // Change decimal-label-weights, task 2.2 (design.md, decision 2): spec idea-score «Вес вне диапазона».
+    [TestCase("101", "0", "longWeight")]
+    [TestCase("-100.01", "0", "longWeight")]
+    [TestCase("0", "150", "shortWeight")]
+    public async Task A_weight_out_of_range_is_refused_and_the_weights_stay(string longWeight, string shortWeight, string field)
     {
         await Handle(new SetLabelWeightCommand("↓ BTC 4h", -2, 1));
 
-        IdeasRequestException refused = Assert.ThrowsAsync<IdeasRequestException>(() => Handle(new SetLabelWeightCommand("↓ BTC 4h", longWeight, shortWeight)))!;
+        IdeasRequestException refused = Assert.ThrowsAsync<IdeasRequestException>(() => Handle(new SetLabelWeightCommand("↓ BTC 4h", decimal.Parse(longWeight, CultureInfo.InvariantCulture), decimal.Parse(shortWeight, CultureInfo.InvariantCulture))))!;
 
-        Assert.That(refused.Errors.Select(error => (error.Code, error.Field)), Is.EqualTo(new[] { ("InvalidWeight", (string?)field) }));
+        Assert.That(refused.Errors.Select(error => (error.Code, error.Field, error.Reason)), Is.EqualTo(new[] { ("InvalidWeight", (string?)field, "вес от −100 до +100, не больше двух знаков после точки") }));
         Assert.That(await _weights.AllAsync(CancellationToken.None), Is.EqualTo(new[] { new LabelWeight("↓ BTC 4h", -2, 1) }));
     }
 
+    // Change decimal-label-weights, task 2.2: spec idea-score «Дробный вес»; the bounds are weights too.
     [Test]
-    public void A_weight_that_is_not_whole_is_refused()
+    public async Task A_weight_with_hundredths_is_saved_and_the_list_gives_it()
     {
-        IdeasRequestException refused = Assert.ThrowsAsync<IdeasRequestException>(() => Handle(new SetLabelWeightCommand("↓ BTC 4h", 0, 0.5m)))!;
+        ScoringLabel row = await Handle(new SetLabelWeightCommand("↓ BTC 4h", -100, 0.25m));
+        await Handle(new SetLabelWeightCommand("оборот ↑ 1h", 100, -2.45m));
 
-        Assert.That(refused.Errors.Select(error => (error.Code, error.Field)), Is.EqualTo(new[] { ("InvalidWeight", (string?)"shortWeight") }));
+        Assert.That(row, Is.EqualTo(new ScoringLabel("↓ BTC 4h", true, "4h", "btc-down-4h", -100, 0.25m)));
+        IReadOnlyList<ScoringLabel> rows = await new GetScoringLabelsQueryHandler(_weights).Handle(new GetScoringLabelsQuery(), CancellationToken.None);
+        Assert.That(rows.Select(label => (label.Text, label.LongWeight, label.ShortWeight)), Is.EquivalentTo(new[] { ("↓ BTC 4h", -100m, 0.25m), ("оборот ↑ 1h", 100m, -2.45m), ("⚡ всплеск", 0m, 0m) }));
+    }
+
+    // Change decimal-label-weights, task 2.2: spec idea-score «Вес дальше сотых»; a nought after the hundredths is no digit.
+    [Test]
+    public async Task A_weight_with_digits_past_the_hundredths_is_refused_and_one_with_noughts_there_is_not()
+    {
+        IdeasRequestException refused = Assert.ThrowsAsync<IdeasRequestException>(() => Handle(new SetLabelWeightCommand("↓ BTC 4h", 0.125m, 0)))!;
+
+        Assert.That(refused.Errors.Select(error => (error.Code, error.Field)), Is.EqualTo(new[] { ("InvalidWeight", (string?)"longWeight") }));
         Assert.That(_weights.Writes, Is.Zero);
+        Assert.That((await Handle(new SetLabelWeightCommand("↓ BTC 4h", 0.100m, 0))).LongWeight, Is.EqualTo(0.1m));
     }
 
     [Test]

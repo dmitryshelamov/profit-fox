@@ -27,7 +27,7 @@ internal static class LabelWeightRepositoryQueries
     public const string Labels =
         """
         SELECT l.text AS "Text", l.enabled AS "Enabled", l.timeframe AS "Timeframe", l.name AS "Signal",
-               COALESCE(w.long_weight, 0)::int AS "LongWeight", COALESCE(w.short_weight, 0)::int AS "ShortWeight"
+               COALESCE(w.long_weight, 0) AS "LongWeight", COALESCE(w.short_weight, 0) AS "ShortWeight"
         FROM (SELECT DISTINCT ON (sl.text) sl.text, sl.enabled, sl.timeframe, s.name
               FROM signal_labels sl JOIN signals s ON s.id = sl.signal_id
               ORDER BY sl.text, sl.enabled DESC, s.name) l

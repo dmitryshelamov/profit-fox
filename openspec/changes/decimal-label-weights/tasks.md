@@ -12,28 +12,28 @@ typecheck`, `npm run lint`, `npm run format:check`, `npm run build`. Кажда�
 
 ## 1. База и замеры
 
-- [ ] 1.1 Снять базу до правок: `dotnet build ProfitFox.slnx --configuration Release`, тесты бэкенда и фронтенда,
+- [x] 1.1 Снять базу до правок: `dotnet build ProfitFox.slnx --configuration Release`, тесты бэкенда и фронтенда,
   SHA-256 `/openapi/v1.json`. Записать числа тестов, предупреждений и хэш в раздел «База» в конце файла.
-- [ ] 1.2 Замер миграции (риск 1): на dev-стенде заполнить `ideas` до размера прода (около 250 тысяч строк: на проде
+- [x] 1.2 Замер миграции (риск 1): на dev-стенде заполнить `ideas` до размера прода (около 250 тысяч строк: на проде
   2026-11-28 9 584 открытых и 236 330 закрытых идей; взять 500 тысяч с запасом) и замерить время миграции группы 2. Записать в «Замеры».
 
 ## 2. Веса и балл дробные
 
-- [ ] 2.1 Миграция `202611280002_decimal_label_weights` (решение 1): `label_weights.long_weight`, `short_weight` →
+- [x] 2.1 Миграция `202611280002_decimal_label_weights` (решение 1): `label_weights.long_weight`, `short_weight` →
   `numeric(5,2)`, проверки `−100…100`; `ideas.score` → `numeric(7,2)`; `Down` по `design.md`, «Migration Plan». Тест
   миграции: целые веса и баллы остались теми же числами.
-- [ ] 2.2 `SetLabelWeightCommandHandler` (решение 2): вес `decimal` без приведения к `int`; отказ вне `−100…100` и с
+- [x] 2.2 `SetLabelWeightCommandHandler` (решение 2): вес `decimal` без приведения к `int`; отказ вне `−100…100` и с
   цифрами дальше сотых, текст ошибки из решения 2. Сценарии «Вес вне диапазона», «Дробный вес», «Вес дальше сотых».
-- [ ] 2.3 `LabelWeight`, `ScoringLabel`, `LabelWeightRepository`, `ScoringLabelResponse`: веса `decimal`;
+- [x] 2.3 `LabelWeight`, `ScoringLabel`, `LabelWeightRepository`, `ScoringLabelResponse`: веса `decimal`;
   `LabelWeightRepositoryQueries.Labels` без `::int`.
-- [ ] 2.4 Балл `decimal` (решение 3): `Idea.Score`, `IdeaDbConverter`, `IdeaRepositoryQueries` (без `i.score::int`),
+- [x] 2.4 Балл `decimal` (решение 3): `Idea.Score`, `IdeaDbConverter`, `IdeaRepositoryQueries` (без `i.score::int`),
   `ListColumns.ScoreOf` и `IdeaScoreQueries` с приведением к `numeric(7,2)`, `IdeaResponses`. Сценарий «Дробные веса»;
   тест-инвариант `ideas.score = ScoreOf` проходит с дробными весами.
-- [ ] 2.5 «Балл от» (решение 3): `FilterResolver.MinScore`/`MinScoreError` разбирают число с не более чем двумя знаками
+- [x] 2.5 «Балл от» (решение 3): `FilterResolver.MinScore`/`MinScoreError` разбирают число с не более чем двумя знаками
   (`decimal`, инвариантная культура), иначе прежняя ошибка с текстом «балл от — число, не больше двух знаков после
   точки»; `IdeaListQuery.MinScore`, `GetIdeaStrategiesQueryHandler`, описания параметров `IdeasController`. Сценарии
   «Дробный порог», «Не число».
-- [ ] 2.6 Поле фильтра «балл» (`FilterRules`): вместо `Whole` — число с не более чем двумя знаками. Сценарий «Дробный
+- [x] 2.6 Поле фильтра «балл» (`FilterRules`): вместо `Whole` — число с не более чем двумя знаками. Сценарий «Дробный
   балл в фильтре».
 
 ## 3. Итоги группами
@@ -65,7 +65,28 @@ typecheck`, `npm run lint`, `npm run format:check`, `npm run build`. Кажда�
 
 ## База
 
+2026-11-28, ветка `feat/decimal-weights` на `c73b750`, облачный контейнер (4 ядра, 15 ГБ; .NET SDK 10.0.115, Node 22,
+Postgres 17 в Docker).
+
+- `dotnet build ProfitFox.slnx --configuration Release`: 0 предупреждений, 0 ошибок.
+- Бэкенд: Unit 927 прошли, Integration 498 прошли, 0 упавших.
+- Фронтенд: 478 тестов в 38 файлах прошли; typecheck, lint, format:check, build зелёные.
+- SHA-256 `/openapi/v1.json`: `8d3dd9a40251a5e2a1d5b564992f71f516c6b1630614916c12b5bf8d761c599f`; `schema.d.ts` в
+  ветке совпадает с тем, что `openapi-typescript` собирает из него.
+
 ## Замеры
+
+Миграция `202611280002_decimal_label_weights` (задача 2.1) на dev-стенде: `docker compose up bench-db` (Postgres 17,
+настройки по умолчанию, `fsync` включён) в облачном контейнере, 4 ядра. `ideas` заполнена до 500 000 строк (10 000
+открытых, 5 052 исключённых, остальные закрытые; 397 МБ с индексами), 4 метки с весами.
+
+| Шаг | Время |
+| --- | --- |
+| `ALTER TABLE label_weights …` (типы и проверки) | 4–5 мс |
+| `ALTER TABLE ideas ALTER COLUMN score TYPE numeric(7,2)` с пересозданием 8 индексов | 4,6–4,9 с (два прогона в `BEGIN … ROLLBACK`) |
+
+Это меньше минуты из риска 1: на проде (~246 000 строк) ожидается около 2–3 секунд блокировки `ideas`, если диск прода
+не намного медленнее. Время миграции стартом API — в задаче 5.2.
 
 ## Итог
 

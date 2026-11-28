@@ -15,7 +15,7 @@ internal static class IdeaRepositoryQueries
         i.entry_raw AS "EntryRaw", i.entry_price AS "EntryPrice", i.entry_time AS "EntryTime", i.stop_price AS "StopPrice", i.target_price AS "TargetPrice",
         i.funding_paid AS "FundingPaid", i.funding_until AS "FundingUntil", i.last_close AS "LastClose", i.computed_until AS "ComputedUntil", i.now_result AS "NowResult", i.now_at AS "NowAt",
         i.exit_time AS "ExitTime", i.exit_reason AS "ExitReason", i.ambiguous AS "Ambiguous", i.exit_price AS "ExitPrice", i.result AS "Result",
-        i.result_usdt AS "ResultUsdt", i.excluded AS "Excluded", i.score::int AS "Score"
+        i.result_usdt AS "ResultUsdt", i.excluded AS "Excluded", i.score AS "Score"
         """;
 
     // The name of an idea is that of its strategy now, or the one it was born with when the strategy is gone.

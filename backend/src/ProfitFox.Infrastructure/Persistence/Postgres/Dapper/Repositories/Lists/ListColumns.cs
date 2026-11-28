@@ -23,7 +23,8 @@ internal static class ListColumns
 
     /// <summary>
     ///     The score of the idea under <paramref name="alias" /> counted from the weights now (change add-idea-score, design.md,
-    ///     decision 2): the sum of the weights of its labels by its side; 0 without labels or weights. The lists read the stored
+    ///     decision 2): the sum of the weights of its labels by its side, exact to the hundredths as <c>numeric(7,2)</c> (change
+    ///     decimal-label-weights, design.md, decision 3); 0 without labels or weights. The lists read the stored
     ///     <c>ideas.score</c>; this is what it is written with and always equals.
     /// </summary>
     public static string ScoreOf(string alias)
@@ -36,7 +37,7 @@ internal static class ListColumns
     /// </summary>
     public static string ScoreOf(string side, string labels)
     {
-        return $"(SELECT COALESCE(sum(CASE WHEN {side} = 'long' THEN w.long_weight ELSE w.short_weight END), 0)::int FROM label_weights w WHERE w.text = ANY({labels}))";
+        return $"(SELECT COALESCE(sum(CASE WHEN {side} = 'long' THEN w.long_weight ELSE w.short_weight END), 0)::numeric(7,2) FROM label_weights w WHERE w.text = ANY({labels}))";
     }
 
     public static readonly IReadOnlyDictionary<string, string> Market = new Dictionary<string, string>(StringComparer.Ordinal)

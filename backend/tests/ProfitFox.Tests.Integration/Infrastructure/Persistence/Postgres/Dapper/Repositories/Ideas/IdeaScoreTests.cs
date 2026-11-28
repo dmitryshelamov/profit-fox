@@ -43,20 +43,39 @@ public sealed class IdeaScoreTests
         Idea bare = await Add(EntrySide.Long, [], "SOLUSDT");
         Idea unknown = await Add(EntrySide.Long, ["без веса"], "XRPUSDT");
 
-        Dictionary<Guid, int> scores = await Scores(IdeaListKind.Open);
+        Dictionary<Guid, decimal> scores = await Scores(IdeaListKind.Open);
 
-        Assert.That((scores[buy.Id], scores[sell.Id], scores[bare.Id], scores[unknown.Id]), Is.EqualTo((-1, 0, 0, 0)));
+        Assert.That((scores[buy.Id], scores[sell.Id], scores[bare.Id], scores[unknown.Id]), Is.EqualTo((-1m, 0m, 0m, 0m)));
+    }
+
+    // Change decimal-label-weights, task 2.4: spec idea-score «Дробные веса»; the sum is exact to the hundredths.
+    [Test]
+    public async Task A_long_with_weights_of_hundredths_scores_their_exact_sum()
+    {
+        await _weights.SetAsync(new LabelWeight("цена ↓ 4h", 1, 0), CancellationToken.None);
+        await _weights.SetAsync(new LabelWeight("цена ↓ 1h", 0.5m, 0), CancellationToken.None);
+        await _weights.SetAsync(new LabelWeight("↓ BTC 15m", -0.25m, 0), CancellationToken.None);
+        await _weights.SetAsync(new LabelWeight("цена ↑ 5m", -0.14m, 0), CancellationToken.None);
+        await _weights.SetAsync(new LabelWeight("плюс 0.1", 0.1m, 0), CancellationToken.None);
+        await _weights.SetAsync(new LabelWeight("плюс 0.2", 0.2m, 0), CancellationToken.None);
+        Idea idea = await Add(EntrySide.Long, ["цена ↓ 4h", "цена ↓ 1h", "↓ BTC 15m", "цена ↑ 5m"], "AUSDT");
+        Idea tenths = await Add(EntrySide.Long, ["плюс 0.1", "плюс 0.2"], "BUSDT");
+
+        Dictionary<Guid, decimal> scores = await Scores(IdeaListKind.Open);
+
+        Assert.That((scores[idea.Id], scores[tenths.Id]), Is.EqualTo((1.11m, 0.3m)));
+        Assert.That((await _ideas.FindAsync(idea.Id, CancellationToken.None))!.Score, Is.EqualTo(1.11m));
     }
 
     [Test]
     public async Task A_change_of_a_weight_changes_the_score_of_a_closed_idea_but_not_the_idea()
     {
         Idea idea = await Close(await Add(EntrySide.Long, ["↓ BTC 4h", "оборот ↑ 1h", "⚡ всплеск"]), 0.004);
-        Assert.That((await Scores(IdeaListKind.Closed))[idea.Id], Is.EqualTo(-1));
+        Assert.That((await Scores(IdeaListKind.Closed))[idea.Id], Is.EqualTo(-1m));
 
         await _weights.SetAsync(new LabelWeight("↓ BTC 4h", 0, 1), CancellationToken.None);
 
-        Assert.That((await Scores(IdeaListKind.Closed))[idea.Id], Is.EqualTo(1));
+        Assert.That((await Scores(IdeaListKind.Closed))[idea.Id], Is.EqualTo(1m));
         Idea read = (await _ideas.FindAsync(idea.Id, CancellationToken.None))!;
         Assert.That((read.Result, read.Labels, read.State), Is.EqualTo(((double?)0.004, idea.Labels, IdeaState.Closed)));
     }
@@ -74,9 +93,25 @@ public sealed class IdeaScoreTests
         ListPage<Idea> fromTwo = await _ideas.ListAsync(new IdeaListQuery(IdeaListKind.Open, new ListOrder("moment", true, 1, 50), MinScore: 2), CancellationToken.None);
         ListPage<Idea> fromMinusOne = await _ideas.ListAsync(new IdeaListQuery(IdeaListKind.Open, new ListOrder("score", true, 1, 50), MinScore: -1), CancellationToken.None);
 
-        Assert.That(sorted.Items.Select(idea => (idea.Id, idea.Score)), Is.EqualTo(new[] { (three.Id, 3), (two.Id, 2), (nought.Id, 0), (minus.Id, -1) }));
-        Assert.That((fromTwo.Total, fromTwo.Items.Select(idea => idea.Score).Order().ToArray()), Is.EqualTo((2, new[] { 2, 3 })).Using<(int, int[])>((a, b) => a.Item1 == b.Item1 && a.Item2.SequenceEqual(b.Item2)));
+        Assert.That(sorted.Items.Select(idea => (idea.Id, idea.Score)), Is.EqualTo(new[] { (three.Id, 3m), (two.Id, 2m), (nought.Id, 0m), (minus.Id, -1m) }));
+        Assert.That((fromTwo.Total, fromTwo.Items.Select(idea => idea.Score).Order().ToArray()), Is.EqualTo((2, new[] { 2m, 3m })).Using<(int, decimal[])>((a, b) => a.Item1 == b.Item1 && a.Item2.SequenceEqual(b.Item2)));
         Assert.That(fromMinusOne.Total, Is.EqualTo(4));
+    }
+
+    // Change decimal-label-weights, task 2.5: spec idea-score «Дробный порог».
+    [Test]
+    public async Task Open_ideas_below_a_least_score_with_hundredths_are_left_out()
+    {
+        await _weights.SetAsync(new LabelWeight("плюс 1.5", 1.5m, 0), CancellationToken.None);
+        await _weights.SetAsync(new LabelWeight("плюс 1.25", 1.25m, 0), CancellationToken.None);
+        await _weights.SetAsync(new LabelWeight("плюс 0.75", 0.75m, 0), CancellationToken.None);
+        Idea high = await Add(EntrySide.Long, ["плюс 1.5"], "AUSDT");
+        Idea even = await Add(EntrySide.Long, ["плюс 1.25"], "BUSDT");
+        await Add(EntrySide.Long, ["плюс 0.75"], "CUSDT");
+
+        ListPage<Idea> page = await _ideas.ListAsync(new IdeaListQuery(IdeaListKind.Open, new ListOrder("score", true, 1, 50), MinScore: 1.25m), CancellationToken.None);
+
+        Assert.That(page.Items.Select(idea => (idea.Id, idea.Score)), Is.EqualTo(new[] { (high.Id, 1.5m), (even.Id, 1.25m) }));
     }
 
     [Test]
@@ -106,6 +141,24 @@ public sealed class IdeaScoreTests
             CancellationToken.None);
 
         Assert.That(page.Items.Select(idea => idea.Id), Is.EquivalentTo(new[] { three.Id, two.Id }));
+    }
+
+    // Change decimal-label-weights, task 2.6: spec saved-filters «Дробный балл в фильтре».
+    [Test]
+    public async Task A_condition_of_a_filter_on_a_score_with_hundredths_takes_the_ideas_with_at_least_that_score()
+    {
+        await _weights.SetAsync(new LabelWeight("плюс 1.5", 1.5m, 0), CancellationToken.None);
+        await _weights.SetAsync(new LabelWeight("плюс 1.25", 1.25m, 0), CancellationToken.None);
+        await _weights.SetAsync(new LabelWeight("плюс 1.24", 1.24m, 0), CancellationToken.None);
+        Idea high = await Add(EntrySide.Long, ["плюс 1.5"], "AUSDT");
+        Idea even = await Add(EntrySide.Long, ["плюс 1.25"], "BUSDT");
+        await Add(EntrySide.Long, ["плюс 1.24"], "CUSDT");
+
+        ListPage<Idea> page = await _ideas.ListAsync(
+            new IdeaListQuery(IdeaListKind.Open, new ListOrder("moment", true, 1, 50), Conditions: [new FilterCondition("score", "ge", "1.25")]),
+            CancellationToken.None);
+
+        Assert.That(page.Items.Select(idea => idea.Id), Is.EquivalentTo(new[] { high.Id, even.Id }));
     }
 
     [Test]
@@ -207,7 +260,7 @@ public sealed class IdeaScoreTests
         return idea;
     }
 
-    private async Task<Dictionary<Guid, int>> Scores(IdeaListKind kind)
+    private async Task<Dictionary<Guid, decimal>> Scores(IdeaListKind kind)
     {
         ListPage<Idea> page = await _ideas.ListAsync(new IdeaListQuery(kind, new ListOrder("moment", true, 1, 200)), CancellationToken.None);
         return page.Items.ToDictionary(idea => idea.Id, idea => idea.Score);

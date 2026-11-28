@@ -51,7 +51,7 @@ public sealed class IdeaStoredScoreTests
         Idea buy = await Add(EntrySide.Long, ["↓ BTC 4h", "без веса"], "AUSDT");
         Idea sell = await Add(EntrySide.Short, ["↓ BTC 4h"], "BUSDT");
 
-        Assert.That((await Stored(buy.Id), await Stored(sell.Id)), Is.EqualTo((3, 1)));
+        Assert.That((await Stored(buy.Id), await Stored(sell.Id)), Is.EqualTo((3m, 1m)));
     }
 
     [Test]
@@ -60,8 +60,8 @@ public sealed class IdeaStoredScoreTests
         await _weights.SetAsync(new LabelWeight("плюс 2", 2, 0), CancellationToken.None);
         Idea idea = await Add(EntrySide.Long, ["плюс 2"]);
 
-        Assert.That((await _ideas.FindAsync(idea.Id, CancellationToken.None))!.Score, Is.EqualTo(2));
-        Assert.That((await _ideas.OpenAsync(CancellationToken.None)).Single().Score, Is.EqualTo(2));
+        Assert.That((await _ideas.FindAsync(idea.Id, CancellationToken.None))!.Score, Is.EqualTo(2m));
+        Assert.That((await _ideas.OpenAsync(CancellationToken.None)).Single().Score, Is.EqualTo(2m));
     }
 
     [Test]
@@ -72,11 +72,11 @@ public sealed class IdeaStoredScoreTests
         Idea closed = await Close(await Add(EntrySide.Long, ["↓ BTC 4h", "оборот ↑ 1h", "⚡ всплеск"], "AUSDT"));
         Idea open = await Add(EntrySide.Short, ["↓ BTC 4h"], "BUSDT");
         Idea other = await Add(EntrySide.Long, ["оборот ↑ 1h"], "CUSDT");
-        Assert.That(await Stored(closed.Id), Is.EqualTo(-1));
+        Assert.That(await Stored(closed.Id), Is.EqualTo(-1m));
 
         await _weights.SetAsync(new LabelWeight("↓ BTC 4h", 0, -3), CancellationToken.None);
 
-        Assert.That((await Stored(closed.Id), await Stored(open.Id), await Stored(other.Id)), Is.EqualTo((1, -3, 1)));
+        Assert.That((await Stored(closed.Id), await Stored(open.Id), await Stored(other.Id)), Is.EqualTo((1m, -3m, 1m)));
         IReadOnlyList<IdeaScoreRow> rows = await _ideas.ScoresAsync(new IdeaListQuery(IdeaListKind.Closed, new ListOrder("exitTime", true, 1, 50)), CancellationToken.None);
         Assert.That(rows.Select(row => (row.Score, row.Ideas)), Is.EqualTo(new[] { (1, 1) }), "the outcomes put the closed idea at its new score");
     }
@@ -89,11 +89,11 @@ public sealed class IdeaStoredScoreTests
         await _weights.SetAsync(new LabelWeight("↓ BTC", -2, 0), CancellationToken.None);
         Idea before = await Add(EntrySide.Long, ["↓ BTC"], "AUSDT");
         Idea later = await Add(EntrySide.Long, ["↓ BTC 5m"], "BUSDT");
-        Assert.That((await Stored(before.Id), await Stored(later.Id)), Is.EqualTo((-2, 0)));
+        Assert.That((await Stored(before.Id), await Stored(later.Id)), Is.EqualTo((-2m, 0m)));
 
         await _labels.SetAsync(new SignalLabel(signal, Enabled: true, "↓ BTC 5m", TimeSpan.FromMinutes(5)), CancellationToken.None);
 
-        Assert.That((await Stored(before.Id), await Stored(later.Id)), Is.EqualTo((0, -2)));
+        Assert.That((await Stored(before.Id), await Stored(later.Id)), Is.EqualTo((0m, -2m)));
     }
 
     [Test]
@@ -112,7 +112,7 @@ public sealed class IdeaStoredScoreTests
         await transaction.CommitAsync();
 
         Assert.That(await adding, Is.True);
-        Assert.That(await Stored(idea.Id), Is.EqualTo(3));
+        Assert.That(await Stored(idea.Id), Is.EqualTo(3m));
     }
 
     // The scanner saves the ideas of a pass in one statement; a change of a weight writes the score of many of the same rows.
@@ -156,7 +156,7 @@ public sealed class IdeaStoredScoreTests
             switch (random.Next(3))
             {
                 case 0:
-                    await _weights.SetAsync(new LabelWeight(texts[random.Next(texts.Length)], random.Next(-3, 4), random.Next(-3, 4)), CancellationToken.None);
+                    await _weights.SetAsync(new LabelWeight(texts[random.Next(texts.Length)], Hundredths(random), Hundredths(random)), CancellationToken.None);
                     break;
                 case 1:
                     int which = random.Next(signals.Length);
@@ -180,10 +180,17 @@ public sealed class IdeaStoredScoreTests
         }
 
         await using NpgsqlConnection connection = await BenchDatabase.DataSource.OpenConnectionAsync();
-        (Guid Id, int Stored, int Counted)[] ideas = [.. await connection.QueryAsync<(Guid, int, int)>($"SELECT i.id, i.score::int, {ListColumns.ScoreOf("i")} FROM ideas i")];
+        (Guid Id, decimal Stored, decimal Counted)[] ideas = [.. await connection.QueryAsync<(Guid, decimal, decimal)>($"SELECT i.id, i.score, {ListColumns.ScoreOf("i")} FROM ideas i")];
         Assert.That(ideas, Has.Length.GreaterThan(30));
         Assert.That(ideas.Where(idea => idea.Stored != idea.Counted), Is.Empty);
         Assert.That(ideas.Select(idea => idea.Stored).Distinct().Count(), Is.GreaterThan(3), "the scores are not all alike");
+        Assert.That(ideas.Any(idea => idea.Stored != decimal.Truncate(idea.Stored)), Is.True, "some scores have hundredths");
+    }
+
+    // A weight of −3 to +3 in hundredths (change decimal-label-weights, task 2.4).
+    private static decimal Hundredths(Random random)
+    {
+        return random.Next(-300, 301) / 100m;
     }
 
     private async Task<Idea> Add(EntrySide side, string[] labels, string symbol = "BTCUSDT")
@@ -206,9 +213,9 @@ public sealed class IdeaStoredScoreTests
         return idea;
     }
 
-    private static async Task<int> Stored(Guid id)
+    private static async Task<decimal> Stored(Guid id)
     {
         await using NpgsqlConnection connection = await BenchDatabase.DataSource.OpenConnectionAsync();
-        return await connection.ExecuteScalarAsync<int>("SELECT score::int FROM ideas WHERE id = @Id", new { Id = id });
+        return await connection.ExecuteScalarAsync<decimal>("SELECT score FROM ideas WHERE id = @Id", new { Id = id });
     }
 }

@@ -31,8 +31,8 @@ public class ScoringController(ISender sender) : ControllerBase
     }
 
     /// <summary>
-    ///     Sets the weights of a label: 200 with its row, 404 for a text no label has, 422 for a weight that is not a whole
-    ///     number from −3 to +3.
+    ///     Sets the weights of a label: 200 with its row, 404 for a text no label has, 422 for a weight that is not a number
+    ///     from −100 to +100 with at most two digits after the point (change decimal-label-weights).
     /// </summary>
     [HttpPut("weights", Name = "SetLabelWeight")]
     [ProducesResponseType<ScoringLabelResponse>(StatusCodes.Status200OK)]
