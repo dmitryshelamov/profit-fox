@@ -61,7 +61,7 @@ public sealed class MigrationTests
 
         await using var connection = new NpgsqlConnection(connectionString);
         long[] versions = [.. await connection.QueryAsync<long>("SELECT \"Version\" FROM \"VersionInfo\" ORDER BY \"Version\"")];
-        Assert.That(versions, Is.EqualTo(new[] { 202611200001L, 202611210001L, 202611220001L, 202611220002L, 202611230001L, 202611230002L, 202611230003L, 202611230004L, 202611250001L, 202611250002L, 202611270001L, 202611280001L }));
+        Assert.That(versions, Is.EqualTo(new[] { 202611200001L, 202611210001L, 202611220001L, 202611220002L, 202611230001L, 202611230002L, 202611230003L, 202611230004L, 202611250001L, 202611250002L, 202611270001L, 202611280001L, 202611280002L }));
         Assert.That(await TablesOf(connectionString), Is.SupersetOf(new[] { "strategies", "strategy_versions", "strategy_signals" }));
     }
 
@@ -297,8 +297,8 @@ public sealed class MigrationTests
 
         string scoreOf = ListColumns.ScoreOf("i");
         Assert.That(
-            await connection.QueryAsync<(string, int, int)>($"SELECT i.symbol, i.score::int, {scoreOf} FROM ideas i ORDER BY i.symbol"),
-            Is.EqualTo(new[] { ("AUSDT", -1, -1), ("BUSDT", 0, 0), ("CUSDT", 0, 0), ("DUSDT", -1, -1), ("EUSDT", -2, -2) }));
+            await connection.QueryAsync<(string, int, decimal)>($"SELECT i.symbol, i.score::int, {scoreOf} FROM ideas i ORDER BY i.symbol"),
+            Is.EqualTo(new[] { ("AUSDT", -1, -1m), ("BUSDT", 0, 0m), ("CUSDT", 0, 0m), ("DUSDT", -1, -1m), ("EUSDT", -2, -2m) }));
         Assert.That(
             await connection.QueryAsync<string>("SELECT indexdef FROM pg_indexes WHERE tablename = 'ideas' AND indexname IN ('ideas_labels_gin', 'ideas_state_score_ix') ORDER BY indexname"),
             Is.EqualTo(new[]
@@ -313,6 +313,79 @@ public sealed class MigrationTests
         Assert.That(await ColumnsOf(connection, ["ideas"]), Has.None.StartsWith("ideas.score:"));
         Assert.That(await connection.ExecuteScalarAsync<long>("SELECT count(*) FROM pg_indexes WHERE tablename = 'ideas' AND indexname IN ('ideas_labels_gin', 'ideas_state_score_ix')"), Is.Zero);
         Assert.That(await connection.ExecuteScalarAsync<long>("SELECT count(*) FROM ideas"), Is.EqualTo(5));
+    }
+
+    /// <summary>
+    ///     Change decimal-label-weights, task 2.1 (design.md, decision 1, «Migration Plan»): the weights become numbers with
+    ///     two digits after the point from −100 to +100 and the score one with two digits; whole weights and scores stay the
+    ///     same numbers, the index of the lists by score stays. Down gives back whole weights of −3 to +3 and a whole score
+    ///     counted from them.
+    /// </summary>
+    [Test]
+    public async Task The_weights_and_the_score_become_decimal_keep_their_whole_values_and_go_back()
+    {
+        string connectionString = await BenchDatabase.NewDatabase();
+        await using var connection = new NpgsqlConnection(connectionString);
+        var registrations = new ServiceCollection();
+        PostgresRegistrar.Configure(BenchDatabase.Settings(connectionString), registrations);
+        await using ServiceProvider services = registrations.BuildServiceProvider();
+        using IServiceScope scope = services.CreateScope();
+        IMigrationRunner runner = scope.ServiceProvider.GetRequiredService<IMigrationRunner>();
+        runner.MigrateUp(202611280001);
+        await connection.ExecuteAsync("INSERT INTO label_weights (text, long_weight, short_weight) VALUES ('↓ BTC 4h', -3, 3), ('оборот ↑ 1h', 1, 0), ('⚡ всплеск', 0, -1)");
+        await connection.ExecuteAsync(
+            """
+            INSERT INTO ideas (id, strategy_id, strategy_name, strategy_version, timeframe, symbol, side, moment, size, after_minutes, until, candle_close, labels, state, score)
+            SELECT gen_random_uuid(), gen_random_uuid(), 's', 1, '1h', v.symbol, v.side, now(), 100, 0, now() + interval '1 day', 1, v.labels, v.state, v.score
+            FROM (VALUES ('AUSDT', 'long', ARRAY['↓ BTC 4h', 'оборот ↑ 1h', '⚡ всплеск'], 'open', -2),
+                         ('BUSDT', 'short', ARRAY['↓ BTC 4h', 'оборот ↑ 1h', '⚡ всплеск'], 'closed', 2),
+                         ('CUSDT', 'long', ARRAY[]::text[], 'open', 0)) AS v(symbol, side, labels, state, score)
+            """);
+
+        runner.MigrateUp(202611280002);
+
+        Assert.That(
+            await ColumnsOf(connection, ["label_weights"]),
+            Is.EqualTo(new[] { "label_weights.text:text:NO", "label_weights.long_weight:numeric:NO", "label_weights.short_weight:numeric:NO" }));
+        Assert.That(await ColumnsOf(connection, ["ideas"]), Does.Contain("ideas.score:numeric:NO"));
+        Assert.That(
+            await connection.QueryAsync<string>(
+                "SELECT column_name || ':' || numeric_precision || ',' || numeric_scale FROM information_schema.columns WHERE table_schema = 'public' AND ((table_name = 'label_weights' AND column_name LIKE '%weight') OR (table_name = 'ideas' AND column_name = 'score')) ORDER BY column_name"),
+            Is.EqualTo(new[] { "long_weight:5,2", "score:7,2", "short_weight:5,2" }));
+        Assert.That(
+            await connection.QueryAsync<(string, decimal, decimal)>("SELECT text, long_weight, short_weight FROM label_weights ORDER BY text COLLATE \"C\""),
+            Is.EqualTo(new[] { ("оборот ↑ 1h", 1m, 0m), ("↓ BTC 4h", -3m, 3m), ("⚡ всплеск", 0m, -1m) }));
+        Assert.That(
+            await connection.QueryAsync<(string, decimal)>("SELECT symbol, score FROM ideas ORDER BY symbol"),
+            Is.EqualTo(new[] { ("AUSDT", -2m), ("BUSDT", 2m), ("CUSDT", 0m) }));
+        Assert.That(
+            await connection.QueryAsync<string>("SELECT indexdef FROM pg_indexes WHERE tablename = 'ideas' AND indexname = 'ideas_state_score_ix'"),
+            Is.EqualTo(new[] { "CREATE INDEX ideas_state_score_ix ON public.ideas USING btree (state, score DESC NULLS LAST, moment DESC, id)" }));
+        await connection.ExecuteAsync("INSERT INTO label_weights (text, long_weight, short_weight) VALUES ('цена ↓ 15m', 0.25, -100), ('цена ↓ 1d', 100, 2.45)");
+        await connection.ExecuteAsync("INSERT INTO ideas (id, strategy_id, strategy_name, strategy_version, timeframe, symbol, side, moment, size, after_minutes, until, candle_close, labels, state) VALUES (gen_random_uuid(), gen_random_uuid(), 's', 1, '1h', 'DUSDT', 'long', now(), 100, 0, now() + interval '1 day', 1, ARRAY['цена ↓ 15m'], 'open')");
+        Assert.That(await connection.ExecuteScalarAsync<decimal>("SELECT score FROM ideas WHERE symbol = 'DUSDT'"), Is.Zero, "a new idea still scores 0 by default");
+        PostgresException? tooHigh = Assert.ThrowsAsync<PostgresException>(() => connection.ExecuteAsync("INSERT INTO label_weights (text, long_weight, short_weight) VALUES ('фандинг ↑', 100.01, 0)"));
+        Assert.That(tooHigh!.SqlState, Is.EqualTo(PostgresErrorCodes.CheckViolation));
+        PostgresException? tooLow = Assert.ThrowsAsync<PostgresException>(() => connection.ExecuteAsync("UPDATE label_weights SET short_weight = -101 WHERE text = '↓ BTC 4h'"));
+        Assert.That(tooLow!.SqlState, Is.EqualTo(PostgresErrorCodes.CheckViolation));
+        await connection.ExecuteAsync("UPDATE ideas SET score = 1.11 WHERE symbol = 'AUSDT'");
+
+        runner.MigrateDown(202611280001);
+
+        Assert.That(
+            await ColumnsOf(connection, ["label_weights"]),
+            Is.EqualTo(new[] { "label_weights.text:text:NO", "label_weights.long_weight:smallint:NO", "label_weights.short_weight:smallint:NO" }));
+        Assert.That(await ColumnsOf(connection, ["ideas"]), Does.Contain("ideas.score:smallint:NO"));
+        Assert.That(
+            await connection.QueryAsync<(string, short, short)>("SELECT text, long_weight, short_weight FROM label_weights ORDER BY text COLLATE \"C\""),
+            Is.EqualTo(new[] { ("оборот ↑ 1h", (short)1, (short)0), ("цена ↓ 15m", (short)0, (short)-3), ("цена ↓ 1d", (short)3, (short)2), ("↓ BTC 4h", (short)-3, (short)3), ("⚡ всплеск", (short)0, (short)-1) }));
+        Assert.That(
+            await connection.QueryAsync<(string, short)>("SELECT symbol, score FROM ideas ORDER BY symbol"),
+            Is.EqualTo(new[] { ("AUSDT", (short)-2), ("BUSDT", (short)2), ("CUSDT", (short)0), ("DUSDT", (short)0) }),
+            "the score is counted again from the whole weights");
+        PostgresException? oldRange = Assert.ThrowsAsync<PostgresException>(() => connection.ExecuteAsync("UPDATE label_weights SET long_weight = 4 WHERE text = '↓ BTC 4h'"));
+        Assert.That(oldRange!.SqlState, Is.EqualTo(PostgresErrorCodes.CheckViolation));
+        Assert.That(await connection.ExecuteScalarAsync<long>("SELECT count(*) FROM pg_indexes WHERE tablename = 'ideas' AND indexname = 'ideas_state_score_ix'"), Is.EqualTo(1));
     }
 
     private static async Task<string[]> ColumnsOf(NpgsqlConnection connection, string[] tables)

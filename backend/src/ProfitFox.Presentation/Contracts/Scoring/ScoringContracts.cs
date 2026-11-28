@@ -5,10 +5,10 @@ namespace ProfitFox.Presentation.Contracts.Scoring;
 ///     with it is on, the timeframe and the signal of that label — none for the built-in label —, the weights for a long and
 ///     for a short, and whether it is the built-in label.
 /// </summary>
-public sealed record ScoringLabelResponse(string Text, bool Enabled, string? Timeframe, string? Signal, int LongWeight, int ShortWeight, bool BuiltIn);
+public sealed record ScoringLabelResponse(string Text, bool Enabled, string? Timeframe, string? Signal, decimal LongWeight, decimal ShortWeight, bool BuiltIn);
 
 /// <summary>
-///     The weights of the label with the text, each a whole number from −3 to +3. A number that is not whole is refused at
-///     its field rather than when the body is read.
+///     The weights of the label with the text, each a number from −100 to +100 with at most two digits after the point (change
+///     decimal-label-weights, design.md, decision 2). Another number is refused at its field rather than when the body is read.
 /// </summary>
 public sealed record LabelWeightRequest(string? Text, decimal? LongWeight, decimal? ShortWeight);

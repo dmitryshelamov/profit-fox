@@ -31,7 +31,7 @@ internal sealed class GetIdeaStrategiesQueryHandler(IIdeaRepository ideas, ISave
 
     public async Task<IdeaStrategiesResult> Handle(GetIdeaStrategiesQuery request, CancellationToken cancellationToken)
     {
-        (InstrumentKind? pairKind, int? minScore) = Check(request);
+        (InstrumentKind? pairKind, decimal? minScore) = Check(request);
         (IReadOnlyList<FilterCondition> conditions, bool gone) = await FilterResolver.ConditionsAsync(filters, request.Filter, FilterPlace.Ideas, cancellationToken);
         IdeaListKind kind = request.State == "closed" ? IdeaListKind.Closed : IdeaListKind.Open;
         ListOrder order = FilterResolver.Order(ListFields.Ideas, kind == IdeaListKind.Closed ? "exitTime" : "moment", new ListRequest(null, null, null, null, request.Filter));
@@ -60,7 +60,7 @@ internal sealed class GetIdeaStrategiesQueryHandler(IIdeaRepository ideas, ISave
     }
 
     // The choices of a list of values; a value outside the list is an error at its field. The kind of the pair asked for.
-    private static (InstrumentKind? PairKind, int? MinScore) Check(GetIdeaStrategiesQuery request)
+    private static (InstrumentKind? PairKind, decimal? MinScore) Check(GetIdeaStrategiesQuery request)
     {
         List<PreviewErrorInternal> errors = [];
         Choice(errors, "state", request.State, States);
@@ -76,7 +76,7 @@ internal sealed class GetIdeaStrategiesQueryHandler(IIdeaRepository ideas, ISave
             errors.Add(kindError);
         }
 
-        if (FilterResolver.MinScoreError(request.MinScore, out int? minScore) is { } scoreError)
+        if (FilterResolver.MinScoreError(request.MinScore, out decimal? minScore) is { } scoreError)
         {
             errors.Add(scoreError);
         }

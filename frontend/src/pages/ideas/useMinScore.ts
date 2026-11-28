@@ -3,22 +3,33 @@ import { useEffect, useState } from 'react';
 /** Where the browser keeps «Балл от»: one key for «Открытые» and «Журнал» (change add-idea-score, design.md, decision 4). */
 export const minScoreKey = 'profit-fox.min-score';
 
-/** The scores «Балл от» offers: from −3 to +9. */
-export const minScores = Array.from({ length: 13 }, (_, index) => index - 3);
-
-/** The event that tells the other tables of this tab the score chosen; the event `storage` tells other tabs. */
-const chosenEvent = 'profit-fox:min-score';
-
-function scoreOf(value: unknown): number | undefined {
+/**
+ * The least score of the text typed in «Балл от» (change decimal-label-weights, design.md, decision 5): a number with at
+ * most two digits after the point, as the server takes it, with a point or a comma; `undefined` for anything else. A whole number kept before the
+ * scores had hundredths reads as the same number (risk 3).
+ */
+export function leastScoreOf(value: unknown): number | undefined {
   if (typeof value !== 'string' && typeof value !== 'number') {
     return undefined;
   }
 
-  const number = Number(value);
-  return value !== '' && Number.isInteger(number) && minScores.includes(number)
-    ? number
-    : undefined;
+  const text = decimalText(String(value));
+  const number = Number(text);
+  return /^-?\d+(\.\d{1,2})?$/.test(text) && Number.isFinite(number) ? number : undefined;
 }
+
+/**
+ * A number as typed in a field of a score or a weight: spaces around dropped, a decimal comma read as a point and the
+ * typographic minus as a hyphen, so «−0,5» reads as `-0.5` (a Russian keyboard types a comma).
+ */
+export function decimalText(text: string): string {
+  return text.trim().replace(',', '.').replace('−', '-');
+}
+
+/** The event that tells the other tables of this tab the score chosen; the event `storage` tells other tabs. */
+const chosenEvent = 'profit-fox:min-score';
+
+const scoreOf = leastScoreOf;
 
 function readScore(): number | undefined {
   try {
@@ -41,8 +52,9 @@ function writeScore(score: number | undefined): void {
 }
 
 /**
- * «Балл от» above the tables of «Идеи» (spec idea-score «Балл в разделе «Идеи»»): no least score (`undefined`) or a whole
- * number from −3 to +9. One value for both tabs, kept in the browser; a browser that keeps nothing starts with none.
+ * «Балл от» above the tables of «Идеи» (spec idea-score «Балл в разделе «Идеи»»): no least score (`undefined`) or a
+ * number with at most two digits after the point (change decimal-label-weights). One value for both tabs, kept in the
+ * browser under the same key as before; a browser that keeps nothing starts with none.
  */
 export function useMinScore() {
   const [minScore, setMinScore] = useState<number | undefined>(readScore);

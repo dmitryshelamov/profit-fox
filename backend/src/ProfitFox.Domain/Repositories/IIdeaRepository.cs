@@ -57,7 +57,8 @@ public interface IIdeaRepository
 
     /// <summary>
     ///     The closed ideas that match the query by their score now (change add-idea-score, spec idea-score «Итоги по баллу»):
-    ///     a row a score with at least one idea, from the highest score; excluded ideas do not count.
+    ///     a row a group of scores half a point wide with at least one idea, from the highest group (change
+    ///     decimal-label-weights, design.md, decision 4); excluded ideas do not count.
     /// </summary>
     Task<IReadOnlyList<IdeaScoreRow>> ScoresAsync(IdeaListQuery query, CancellationToken cancellationToken);
 

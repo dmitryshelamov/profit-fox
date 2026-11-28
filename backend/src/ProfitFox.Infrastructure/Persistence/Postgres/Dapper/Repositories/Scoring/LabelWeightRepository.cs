@@ -10,7 +10,7 @@ namespace ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Scor
 
 /// <summary>
 ///     The weights of the labels in <c>label_weights</c> (change add-idea-score, design.md, decision 1). The database refuses
-///     a weight outside −3…3.
+///     a weight outside −100…100 (change decimal-label-weights, design.md, decision 1).
 /// </summary>
 internal sealed class LabelWeightRepository(NpgsqlDataSource database) : ILabelWeightRepository
 {
@@ -28,7 +28,7 @@ internal sealed class LabelWeightRepository(NpgsqlDataSource database) : ILabelW
         await connection.ExecuteAsync(new CommandDefinition(IdeaScoreQueries.LockWeights, transaction: transaction, cancellationToken: cancellationToken));
         await connection.ExecuteAsync(new CommandDefinition(
             LabelWeightRepositoryQueries.Set,
-            new { weight.Text, Long = (short)weight.Long, Short = (short)weight.Short },
+            new { weight.Text, weight.Long, weight.Short },
             transaction,
             cancellationToken: cancellationToken));
         await RecountAsync(connection, transaction, [weight.Text], cancellationToken);
@@ -70,9 +70,9 @@ internal sealed class LabelWeightRepository(NpgsqlDataSource database) : ILabelW
     {
         public string Text { get; init; } = "";
 
-        public short Long { get; init; }
+        public decimal Long { get; init; }
 
-        public short Short { get; init; }
+        public decimal Short { get; init; }
     }
 
     private sealed class LabelRow
@@ -85,8 +85,8 @@ internal sealed class LabelWeightRepository(NpgsqlDataSource database) : ILabelW
 
         public string Signal { get; init; } = "";
 
-        public int LongWeight { get; init; }
+        public decimal LongWeight { get; init; }
 
-        public int ShortWeight { get; init; }
+        public decimal ShortWeight { get; init; }
     }
 }
