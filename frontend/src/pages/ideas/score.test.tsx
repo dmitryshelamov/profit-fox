@@ -73,6 +73,27 @@ describe('the score in «Идеи»', () => {
     expect(within(nought).getByText('0')).toHaveClass('text-muted');
   });
 
+  // Scenario «Дробный балл в колонке» (change decimal-label-weights, task 4.6).
+  it('shows a score with hundredths without the noughts after its last digit', async () => {
+    routes({
+      'GET /api/ideas': ideaPage([
+        idea({ id: 'a', symbol: 'AUSDT', score: -0.5 }),
+        idea({ id: 'b', symbol: 'BUSDT', score: '1.10' }),
+        idea({ id: 'c', symbol: 'CUSDT', score: 1.11 }),
+      ]),
+    });
+    renderApp('/ideas');
+
+    const minus = scoreCell(await screen.findByRole('row', { name: 'AUSDT breakout-long 1h' }));
+    expect(within(minus).getByText('-0.5')).toHaveClass('text-err');
+    expect(
+      scoreCell(screen.getByRole('row', { name: 'BUSDT breakout-long 1h' })),
+    ).toHaveTextContent('+1.1');
+    expect(
+      scoreCell(screen.getByRole('row', { name: 'CUSDT breakout-long 1h' })),
+    ).toHaveTextContent('+1.11');
+  });
+
   // Scenario «Сортировка по колонке».
   it('sorts the journal by the score from the highest on the first page', async () => {
     const requests = routes({
@@ -95,13 +116,13 @@ describe('the score in «Идеи»', () => {
     expect(history.location.search).not.toContain('page=');
   });
 
-  // Scenario «Выбор «Балл от»».
+  // Scenario «Выбор «Балл от»» (change decimal-label-weights, task 4.5: a number typed in the field).
   it('takes «Балл от 2» on the open ideas into the journal and its summary, and the browser keeps it', async () => {
     const requests = routes();
     renderApp('/ideas');
     await screen.findByRole('row', { name: 'SOLUSDT breakout-long 1h' });
 
-    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Балл от' }), '2');
+    await userEvent.type(screen.getByRole('spinbutton', { name: 'Балл от' }), '2');
     await waitFor(() =>
       expect(queriesOf(requests, '/api/ideas').at(-1)!.get('minScore')).toBe('2'),
     );
@@ -114,7 +135,7 @@ describe('the score in «Идеи»', () => {
     await waitFor(() =>
       expect(queriesOf(requests, '/api/ideas/summary').at(-1)!.get('minScore')).toBe('2'),
     );
-    expect(screen.getByRole('combobox', { name: 'Балл от' })).toHaveValue('2');
+    expect(screen.getByRole('spinbutton', { name: 'Балл от' })).toHaveValue(2);
     expect(localStorage.getItem(minScoreKey)).toBe('2');
   });
 
@@ -124,10 +145,10 @@ describe('the score in «Идеи»', () => {
     renderApp('/ideas');
     await screen.findByRole('row', { name: 'SOLUSDT breakout-long 1h' });
 
-    expect(screen.getByRole('combobox', { name: 'Балл от' })).toHaveValue('-1');
+    expect(screen.getByRole('spinbutton', { name: 'Балл от' })).toHaveValue(-1);
     expect(queriesOf(requests, '/api/ideas').at(-1)!.get('minScore')).toBe('-1');
 
-    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Балл от' }), '');
+    await userEvent.clear(screen.getByRole('spinbutton', { name: 'Балл от' }));
 
     await waitFor(() =>
       expect(queriesOf(requests, '/api/ideas').at(-1)!.has('minScore')).toBe(false),
@@ -135,30 +156,46 @@ describe('the score in «Идеи»', () => {
     expect(localStorage.getItem(minScoreKey)).toBeNull();
   });
 
-  it('offers the scores from −3 to +9', async () => {
-    routes();
+  // Change decimal-label-weights, task 4.5 (design.md, decision 5): «Балл от» is a number to the hundredths.
+  it('takes a least score with hundredths, and a number past them is not asked for', async () => {
+    const requests = routes();
     renderApp('/ideas');
     await screen.findByRole('row', { name: 'SOLUSDT breakout-long 1h' });
+    const field = screen.getByRole('spinbutton', { name: 'Балл от' });
+    expect(field).toHaveAttribute('step', '0.01');
 
-    const options = within(screen.getByRole('combobox', { name: 'Балл от' }))
-      .getAllByRole('option')
-      .map((option) => option.textContent);
-    expect(options[0]).toBe('Балл от: все');
-    expect(options.slice(1)).toEqual([
-      'Балл от: -3',
-      'Балл от: -2',
-      'Балл от: -1',
-      'Балл от: 0',
-      'Балл от: +1',
-      'Балл от: +2',
-      'Балл от: +3',
-      'Балл от: +4',
-      'Балл от: +5',
-      'Балл от: +6',
-      'Балл от: +7',
-      'Балл от: +8',
-      'Балл от: +9',
-    ]);
+    await userEvent.type(field, '1.25');
+    await waitFor(() =>
+      expect(queriesOf(requests, '/api/ideas').at(-1)!.get('minScore')).toBe('1.25'),
+    );
+    expect(localStorage.getItem(minScoreKey)).toBe('1.25');
+    await userEvent.type(field, '5');
+
+    expect(field).toHaveValue(1.255);
+    expect(field).toHaveAttribute('aria-invalid', 'true');
+    expect(
+      queriesOf(requests, '/api/ideas')
+        .map((query) => query.get('minScore'))
+        .filter((least) => least !== null && least !== '1' && least !== '1.2' && least !== '1.25'),
+    ).toEqual([]);
+    expect(localStorage.getItem(minScoreKey)).toBe('1.25');
+  });
+
+  // Risk 3 of change decimal-label-weights: the whole number kept before reads as the same number.
+  it('starts with a whole number kept before the scores had hundredths, and with a number with hundredths', async () => {
+    localStorage.setItem(minScoreKey, '3');
+    const requests = routes();
+    const { unmount } = renderApp('/ideas');
+    await screen.findByRole('row', { name: 'SOLUSDT breakout-long 1h' });
+    expect(screen.getByRole('spinbutton', { name: 'Балл от' })).toHaveValue(3);
+    expect(queriesOf(requests, '/api/ideas').at(-1)!.get('minScore')).toBe('3');
+    unmount();
+
+    localStorage.setItem(minScoreKey, '-0.75');
+    renderApp('/ideas');
+    await screen.findByRole('row', { name: 'SOLUSDT breakout-long 1h' });
+    expect(screen.getByRole('spinbutton', { name: 'Балл от' })).toHaveValue(-0.75);
+    expect(queriesOf(requests, '/api/ideas').at(-1)!.get('minScore')).toBe('-0.75');
   });
 
   it('counts the strategies with «Балл от»', async () => {
@@ -173,7 +210,7 @@ describe('the score in «Идеи»', () => {
     renderApp('/ideas');
     await screen.findByRole('row', { name: 'SOLUSDT breakout-long 1h' });
 
-    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Балл от' }), '3');
+    await userEvent.type(screen.getByRole('spinbutton', { name: 'Балл от' }), '3');
 
     await waitFor(() =>
       expect(queriesOf(requests, '/api/ideas/strategies').at(-1)!.get('minScore')).toBe('3'),
@@ -244,5 +281,46 @@ describe('the hint of the labels of an idea', () => {
         .map((item) => item.textContent),
     ).toEqual(['OI ↓ 4h+1', 'цена ↓ 4h+1', '↓ BTC 1h-1']);
     expect(hint).toHaveTextContent('без веса (1): волат.↑ 15m');
+  });
+
+  // Change decimal-label-weights, task 4.6: weights with hundredths in the hint, their sum to the hundredths.
+  it('shows weights with hundredths and their sum without the error of a binary fraction', async () => {
+    const weight = (text: string, longWeight: number) => ({
+      text,
+      enabled: true,
+      timeframe: '1h',
+      signal: text,
+      longWeight,
+      shortWeight: 0,
+      builtIn: false,
+    });
+    routes({
+      'GET /api/ideas': ideaPage([
+        idea({
+          side: 'long',
+          score: 0.3,
+          labels: ['плюс 0.1', 'плюс 0.2', 'минус 0.25', 'плюс 0.25'],
+        }),
+      ]),
+      'GET /api/scoring/labels': () =>
+        json([
+          weight('плюс 0.1', 0.1),
+          weight('плюс 0.2', 0.2),
+          weight('минус 0.25', -0.25),
+          weight('плюс 0.25', 0.25),
+        ]),
+    });
+    renderApp('/ideas');
+    const row = await screen.findByRole('row', { name: 'SOLUSDT breakout-long 1h' });
+    await userEvent.hover(within(row).getByText('плюс 0.1').parentElement!);
+    const hint = await screen.findByRole('tooltip');
+
+    await waitFor(() => expect(hint).toHaveTextContent('Балл лонга'));
+    expect(within(hint).getByText('Балл лонга').nextSibling).toHaveTextContent(/^\+0\.3$/);
+    expect(
+      within(hint)
+        .getAllByRole('listitem')
+        .map((item) => item.textContent),
+    ).toEqual(['плюс 0.25+0.25', 'плюс 0.2+0.2', 'плюс 0.1+0.1', 'минус 0.25-0.25']);
   });
 });

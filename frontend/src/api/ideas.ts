@@ -28,7 +28,10 @@ export interface IdeaChoices {
   readonly state?: string;
   /** The kind of the pair of the idea (change add-instrument-kind-filter); every kind when not given. */
   readonly kind?: InstrumentKind;
-  /** Only ideas with a score of at least this (change add-idea-score); every score when not given. */
+  /**
+   * Only ideas with a score of at least this, a number with at most two digits after the point (change add-idea-score,
+   * change decimal-label-weights); every score when not given.
+   */
   readonly minScore?: number;
 }
 
@@ -76,7 +79,8 @@ export async function countIdeasByStrategy(
 
 /**
  * The outcomes of the closed ideas by score with the choices of the journal and the saved filter (change add-idea-score,
- * spec idea-score «Итоги по баллу»): a row a score with at least one idea, from the highest.
+ * spec idea-score «Итоги по баллу»): a row a group of scores half a point wide, from `from` up to but not including `to`,
+ * with at least one idea, from the highest (change decimal-label-weights).
  */
 export async function scoreIdeas(choices: IdeaChoices = {}, filter?: string): Promise<IdeaScores> {
   const query = { ...choicesQuery(choices), ...(filter === undefined ? {} : { filter }) };

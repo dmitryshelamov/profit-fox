@@ -32,9 +32,17 @@ const labels = [
   burst,
 ];
 
+// The outcomes by score in groups of 0.5 (change decimal-label-weights, design.md, decision 4): each by its lower bound.
 function scores(rows: readonly (readonly [number, number])[]) {
   return json({
-    rows: rows.map(([score, ideas]) => ({ score, ideas, wins: 0.5, mean: 0.002, sum: 1.5 })),
+    rows: rows.map(([from, ideas]) => ({
+      from,
+      to: from + 0.5,
+      ideas,
+      wins: 0.5,
+      mean: 0.002,
+      sum: 1.5,
+    })),
     filterGone: false,
   });
 }
@@ -47,10 +55,17 @@ function routes(extra: Record<string, FakeRoute> = {}) {
     'GET /api/ideas/scores': () =>
       scores([
         [2, 40],
-        [0, 12],
+        [0.5, 12],
       ]),
     ...extra,
   });
+}
+
+// Types into the field of a weight in place of its number.
+async function type(name: string, text: string) {
+  const field = screen.getByRole('spinbutton', { name });
+  await userEvent.clear(field);
+  await userEvent.type(field, text);
 }
 
 const queriesOf = (requests: readonly Request[], path: string) =>
@@ -80,41 +95,92 @@ describe('the section «Скоринг»', () => {
     expect(within(rows[0]!).getByText('btc-down-4h')).toBeInTheDocument();
     expect(within(rows[2]!).getByText('выключена')).toBeInTheDocument();
     expect(within(rows[3]!).getByText('встроенная метка')).toBeInTheDocument();
-    expect(table.getByRole('combobox', { name: 'Вес лонга оборот ↑ 1h' })).toHaveValue('1');
-    expect(
-      within(table.getByRole('combobox', { name: 'Вес шорта ↓ BTC 4h' }))
-        .getAllByRole('option')
-        .map((option) => option.textContent),
-    ).toEqual(['-3', '-2', '-1', '0', '+1', '+2', '+3']);
+    expect(table.getByRole('spinbutton', { name: 'Вес лонга оборот ↑ 1h' })).toHaveValue(1);
+    // Change decimal-label-weights, task 4.3 (design.md, decision 5): a weight is a number in hundredths from −100 to +100.
+    const field = table.getByRole('spinbutton', { name: 'Вес шорта ↓ BTC 4h' });
+    expect([
+      field.getAttribute('step'),
+      field.getAttribute('min'),
+      field.getAttribute('max'),
+    ]).toEqual(['0.01', '-100', '100']);
   });
 
-  // Scenario «Правка веса».
-  it('saves a weight changed in its row and reads the outcomes by score again', async () => {
+  // Scenario «Правка веса» (change decimal-label-weights, task 4.3): a number typed in the row is saved by Enter.
+  it('saves a weight typed in its row on Enter and reads the outcomes by score again', async () => {
     const requests = routes({
       'PUT /api/scoring/weights': () =>
-        json(label({ text: '↓ BTC 4h', timeframe: '4h', signal: 'btc-down-4h', longWeight: -2 })),
+        json(label({ text: '↓ BTC 4h', timeframe: '4h', signal: 'btc-down-4h', longWeight: -0.5 })),
     });
     renderApp('/scoring');
     await screen.findByRole('table', { name: 'Итоги по баллу' });
     const before = queriesOf(requests, '/api/ideas/scores').length;
 
-    await userEvent.selectOptions(
-      screen.getByRole('combobox', { name: 'Вес лонга ↓ BTC 4h' }),
-      '-2',
-    );
+    const field = screen.getByRole('spinbutton', { name: 'Вес лонга ↓ BTC 4h' });
+    await userEvent.clear(field);
+    await userEvent.type(field, '-0.5{Enter}');
 
-    await waitFor(async () =>
-      expect(await bodiesOf(requests, 'PUT', '/api/scoring/weights')).toEqual([
-        { text: '↓ BTC 4h', longWeight: -2, shortWeight: 0 },
-      ]),
+    await waitFor(() =>
+      expect(
+        screen.getByRole('spinbutton', { name: 'Вес лонга ↓ BTC 4h' }).parentElement,
+      ).toHaveClass('[&>input]:text-err'),
     );
+    expect(await bodiesOf(requests, 'PUT', '/api/scoring/weights')).toEqual([
+      { text: '↓ BTC 4h', longWeight: -0.5, shortWeight: 0 },
+    ]);
     await waitFor(() =>
       expect(queriesOf(requests, '/api/ideas/scores').length).toBeGreaterThan(before),
     );
-    expect(screen.getByRole('combobox', { name: 'Вес лонга ↓ BTC 4h' })).toHaveValue('-2');
-    expect(screen.getByRole('combobox', { name: 'Вес лонга ↓ BTC 4h' }).parentElement).toHaveClass(
-      '[&>select]:text-err',
+    expect(screen.getByRole('spinbutton', { name: 'Вес лонга ↓ BTC 4h' })).toHaveValue(-0.5);
+    await userEvent.tab();
+    expect(await bodiesOf(requests, 'PUT', '/api/scoring/weights')).toHaveLength(1);
+  });
+
+  it('saves a weight typed in its row when the field is left', async () => {
+    const requests = routes({
+      'PUT /api/scoring/weights': () =>
+        json(
+          label({
+            text: 'оборот ↑ 1h',
+            signal: 'turnover-high-1h',
+            longWeight: 1,
+            shortWeight: 0.25,
+          }),
+        ),
+    });
+    renderApp('/scoring');
+    await screen.findByRole('table', { name: 'Веса меток' });
+
+    const field = screen.getByRole('spinbutton', { name: 'Вес шорта оборот ↑ 1h' });
+    await userEvent.clear(field);
+    await userEvent.type(field, '0.25');
+    await userEvent.tab();
+
+    await waitFor(async () =>
+      expect(await bodiesOf(requests, 'PUT', '/api/scoring/weights')).toEqual([
+        { text: 'оборот ↑ 1h', longWeight: 1, shortWeight: 0.25 },
+      ]),
     );
+    await waitFor(() =>
+      expect(screen.getByRole('spinbutton', { name: 'Вес шорта оборот ↑ 1h' })).toHaveValue(0.25),
+    );
+  });
+
+  // Scenario «Уход из поля без правки».
+  it('sends nothing when the field is left without a change', async () => {
+    const requests = routes();
+    renderApp('/scoring');
+    await screen.findByRole('table', { name: 'Веса меток' });
+
+    await userEvent.click(screen.getByRole('spinbutton', { name: 'Вес лонга оборот ↑ 1h' }));
+    await userEvent.tab();
+    const field = screen.getByRole('spinbutton', { name: 'Вес шорта фандинг' });
+    await userEvent.clear(field);
+    await userEvent.type(field, '0.00{Enter}');
+    await userEvent.clear(field);
+    await userEvent.tab();
+
+    expect(await bodiesOf(requests, 'PUT', '/api/scoring/weights')).toEqual([]);
+    expect(screen.getByRole('spinbutton', { name: 'Вес шорта фандинг' })).toHaveValue(0);
   });
 
   // Scenario «Отказ сервера».
@@ -126,7 +192,7 @@ describe('the section «Скоринг»', () => {
             errors: [
               {
                 code: 'InvalidWeight',
-                reason: 'вес шорта — целое от -3 до +3',
+                reason: 'вес от −100 до +100, не больше двух знаков после точки',
                 field: 'shortWeight',
               },
             ],
@@ -137,13 +203,13 @@ describe('the section «Скоринг»', () => {
     renderApp('/scoring');
     await screen.findByRole('table', { name: 'Веса меток' });
 
-    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Вес шорта фандинг' }), '2');
+    await type('Вес шорта фандинг', '0.125{Enter}');
 
     const row = screen.getByRole('row', { name: 'фандинг' });
     expect(await within(row).findByRole('alert')).toHaveTextContent(
-      /Вес не сохранён.*Стоит прежний вес/,
+      'Вес не сохранён: вес от −100 до +100, не больше двух знаков после точки. Стоит прежний вес.',
     );
-    expect(within(row).getByRole('combobox', { name: 'Вес шорта фандинг' })).toHaveValue('0');
+    expect(within(row).getByRole('spinbutton', { name: 'Вес шорта фандинг' })).toHaveValue(0);
   });
 
   it('keeps the weight before when the server does not answer', async () => {
@@ -151,16 +217,13 @@ describe('the section «Скоринг»', () => {
     renderApp('/scoring');
     await screen.findByRole('table', { name: 'Веса меток' });
 
-    await userEvent.selectOptions(
-      screen.getByRole('combobox', { name: 'Вес лонга ⚡ всплеск' }),
-      '3',
-    );
+    await type('Вес лонга ⚡ всплеск', '3{Enter}');
 
     const row = screen.getByRole('row', { name: '⚡ всплеск' });
     expect(await within(row).findByRole('alert')).toHaveTextContent(
       'Вес не сохранён: сервер не ответил. Стоит прежний вес.',
     );
-    expect(within(row).getByRole('combobox', { name: 'Вес лонга ⚡ всплеск' })).toHaveValue('0');
+    expect(within(row).getByRole('spinbutton', { name: 'Вес лонга ⚡ всплеск' })).toHaveValue(0);
   });
 
   // Task 8.7 (review, P3): the label is gone — renamed or its signal deleted — while the page was open.
@@ -172,7 +235,7 @@ describe('the section «Скоринг»', () => {
     await screen.findByRole('table', { name: 'Веса меток' });
     const before = queriesOf(requests, '/api/scoring/labels').length;
 
-    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Вес шорта фандинг' }), '2');
+    await type('Вес шорта фандинг', '2{Enter}');
 
     const row = screen.getByRole('row', { name: 'фандинг' });
     expect(await within(row).findByRole('alert')).toHaveTextContent(
@@ -181,7 +244,7 @@ describe('the section «Скоринг»', () => {
     await waitFor(() =>
       expect(queriesOf(requests, '/api/scoring/labels').length).toBeGreaterThan(before),
     );
-    expect(within(row).getByRole('combobox', { name: 'Вес шорта фандинг' })).toHaveValue('0');
+    expect(within(row).getByRole('spinbutton', { name: 'Вес шорта фандинг' })).toHaveValue(0);
   });
 
   // Scenario «Меток нет».
@@ -205,30 +268,49 @@ describe('the section «Скоринг»', () => {
 describe('the outcomes by score on «Скоринг»', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('shows each score with its ideas, the share in the plus, the mean and the sum, over 30 days at first', async () => {
+  // Change decimal-label-weights, task 4.4: a row is a group of scores by its bounds.
+  it('shows each group of scores with its ideas, the share in the plus, the mean and the sum, over 30 days at first', async () => {
     const requests = routes();
     renderApp('/scoring');
 
     const table = within(await screen.findByRole('table', { name: 'Итоги по баллу' }));
     expect(
-      within(table.getByRole('row', { name: 'Балл +2' }))
+      table
+        .getAllByRole('row')
+        .slice(1)
+        .map((row) => row.getAttribute('aria-label')),
+    ).toEqual(['Балл от +2 до +2.5', 'Балл от +0.5 до +1']);
+    expect(
+      within(table.getByRole('row', { name: 'Балл от +2 до +2.5' }))
         .getAllByRole('cell')
         .map((cell) => cell.textContent),
-    ).toEqual(['+2', '40', '50 %', '+0.20 %', '+1.50']);
+    ).toEqual(['от +2 до +2.5', '40', '50 %', '+0.20 %', '+1.50']);
     expect(queriesOf(requests, '/api/ideas/scores').at(-1)!.get('period')).toBe('30');
     expect(screen.getByText('52 идей')).toBeInTheDocument();
   });
 
   // Scenario «Малая выборка».
-  it('marks a score with fewer than 30 ideas as a small sample', async () => {
-    routes();
+  it('marks a group of scores with fewer than 30 ideas as a small sample', async () => {
+    routes({
+      'GET /api/ideas/scores': () =>
+        scores([
+          [3, 12],
+          [2, 40],
+          [-0.5, 3],
+        ]),
+    });
     renderApp('/scoring');
 
     const table = within(await screen.findByRole('table', { name: 'Итоги по баллу' }));
     expect(
-      within(table.getByRole('row', { name: 'Балл 0' })).getByText('мало идей < 30'),
+      within(table.getByRole('row', { name: 'Балл от +3 до +3.5' })).getByText('мало идей < 30'),
     ).toBeInTheDocument();
-    expect(within(table.getByRole('row', { name: 'Балл +2' })).queryByText(/мало идей/)).toBeNull();
+    expect(
+      within(table.getByRole('row', { name: 'Балл от -0.5 до 0' })).getByText('мало идей < 30'),
+    ).toBeInTheDocument();
+    expect(
+      within(table.getByRole('row', { name: 'Балл от +2 до +2.5' })).queryByText(/мало идей/),
+    ).toBeNull();
   });
 
   // Scenario «Выбор периода».

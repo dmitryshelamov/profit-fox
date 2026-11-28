@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
 
 import type { IdeaChoices } from '@/api/ideas';
-import { scoreText } from '@/api/scoring';
 import { listSignals } from '@/api/signals';
 import { listStrategies } from '@/api/strategies';
 import { KindChoice } from '@/modules/instrument-kind/KindChoice';
@@ -10,7 +10,7 @@ import { SelectField } from '@/shared/ui/SelectField';
 import { TextField } from '@/shared/ui/TextField';
 
 import { exitWords } from './ideaColumns';
-import { minScores } from './useMinScore';
+import { leastScoreOf } from './useMinScore';
 
 /** The label of a burst of ideas: always among the labels to choose (spec idea-labels «Метки в списках идей»). */
 export const burstLabel = '⚡ всплеск';
@@ -123,23 +123,7 @@ export function IdeaChoiceRow({
         ))}
       </SelectField>
       {kind !== 'pair' && (
-        <SelectField
-          aria-label="Балл от"
-          className="w-[130px]"
-          value={choices.minScore ?? ''}
-          onChange={(event) =>
-            set({
-              minScore: event.target.value === '' ? undefined : Number(event.target.value),
-            })
-          }
-        >
-          <option value="">Балл от: все</option>
-          {minScores.map((least) => (
-            <option key={least} value={least}>
-              Балл от: {scoreText(least)}
-            </option>
-          ))}
-        </SelectField>
+        <MinScoreField minScore={choices.minScore} onChange={(minScore) => set({ minScore })} />
       )}
       {kind === 'open' && (
         <>
@@ -225,5 +209,54 @@ function Check({
       />
       {label}
     </label>
+  );
+}
+
+/**
+ * «Балл от» (change decimal-label-weights, design.md, decision 5): a number with at most two digits after the point; an
+ * empty field is no least score. The text typed stays as it is while it is not such a number yet — «-» or «1.» on the way
+ * to «-1.5» — and is marked wrong, the least score staying the one before. A least score chosen elsewhere — the other tab,
+ * another browser tab — replaces the text.
+ */
+function MinScoreField({
+  minScore,
+  onChange,
+}: {
+  readonly minScore: number | undefined;
+  readonly onChange: (minScore: number | undefined) => void;
+}) {
+  const [text, setText] = useState(minScore === undefined ? '' : String(minScore));
+  const [shown, setShown] = useState(minScore);
+  if (shown !== minScore) {
+    setShown(minScore);
+    if (leastScoreOf(text) !== minScore) {
+      setText(minScore === undefined ? '' : String(minScore));
+    }
+  }
+
+  const typed = (next: string, unfinished: boolean) => {
+    setText(next);
+    const least = leastScoreOf(next);
+    if (next.trim() === '' && !unfinished) {
+      onChange(undefined);
+    } else if (least !== undefined && least !== minScore) {
+      onChange(least);
+    }
+  };
+  const wrong = text.trim() !== '' && leastScoreOf(text) === undefined;
+
+  return (
+    <TextField
+      mono
+      type="number"
+      step="0.01"
+      sign="Балл от"
+      placeholder="все"
+      aria-label="Балл от"
+      aria-invalid={wrong}
+      className="w-[150px]"
+      value={text}
+      onChange={(event) => typed(event.target.value, event.target.validity.badInput)}
+    />
   );
 }
