@@ -8,6 +8,7 @@ import {
 } from '@tanstack/react-router';
 
 import { AppShell } from '@/app/AppShell';
+import { AccountsPage } from '@/pages/accounts/AccountsPage';
 import { IdeasPage } from '@/pages/ideas/IdeasPage';
 import { MarketPage } from '@/pages/market/MarketPage';
 import { clean, PairPage, pairSearch } from '@/pages/market/PairPage';
@@ -222,6 +223,13 @@ const scoringRoute = createRoute({
   component: ScoringPage,
 });
 
+/** «Аккаунты», under the header (change add-exchange-accounts, design.md, decision 9). */
+const accountsRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/accounts',
+  component: AccountsPage,
+});
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   shellRoute.addChildren([
@@ -236,6 +244,7 @@ const routeTree = rootRoute.addChildren([
     marketRoute,
     pairRoute,
     scoringRoute,
+    accountsRoute,
   ]),
   newSignalRoute,
   signalRoute,

@@ -180,12 +180,14 @@ API (`backend/src/ProfitFox.Presentation/appsettings.json`) и Worker
   `Scanner:FeedSilence` (3 мин) — сколько лента минут может молчать: дольше — поток обрывается и подписывается снова с
   последней минуты, а раздел «Идеи» перестаёт писать, что идеи считаются без перерыва; одна настройка на сторожа ленты и
   состояние сканера;
+- `ExchangeAccounts:MasterKey` — мастер-ключ секретов аккаунтов Bybit, только у API (раздел «Аккаунты»);
+  `Bybit:RestAddress` — адрес REST Bybit, пустой — боевой Bybit; тесты ставят сюда свою подделку;
 - `Ideas:Burst:5m` (60), `Ideas:Burst:15m` (25), `Ideas:Burst:1h` (8), `Ideas:Burst:4h` (4), `Ideas:Burst:1d` (4) —
   пороги «⚡ всплеск»: сколько идей одной стороны одной стратегии на одной свече таймфрейма. API берёт пороги из той же
   секции, чтобы показать их в списке сигналов.
 
 Их можно задать переменными окружения, например `ConnectionStrings__Bench`, `MarketData__GrpcUrl`, `Worker__Name`,
-`Scanner__Enabled`, `Ideas__Burst__1h`, `MarketData__HistoryCache__Path`.
+`Scanner__Enabled`, `Ideas__Burst__1h`, `MarketData__HistoryCache__Path`, `ExchangeAccounts__MasterKey`.
 
 Типы API для фронтенда генерируются из OpenAPI работающего API:
 
@@ -279,6 +281,7 @@ cd ~/profit-fox && N="$(cat current)" && PROFIT_FOX_VERSION="$N" docker compose 
    пользователь `firebat` в группе `docker`, сон запрещён (`systemctl mask sleep.target suspend.target hibernate.target
    hybrid-sleep.target`) — машины с рабочим столом. `~/profit-fox/.env.prod` с правами `600` и одной строкой
    `PROFIT_FOX_DB_PASSWORD=<hex>` (например, `openssl rand -hex 24`), на firebat-02 — тот же пароль, что на firebat-01;
+   на firebat-01 там же вторая строка `PROFIT_FOX_MASTER_KEY=<ключ>` (`openssl rand -base64 32`, раздел «Аккаунты»);
    `~/profit-fox/role` с одним словом `main` на firebat-01 и `workers` на firebat-02; `deploy/deploy.sh` из репозитория
    скопировать как `~/profit-fox/deploy.sh` с правом исполнения. Нужны `curl`, `jq` и `docker`.
 5. Пакеты `profit-fox` и `profit-fox-bench-worker` в GHCR сделать публичными после первой публикации: сервер тянет их
@@ -293,6 +296,40 @@ dotnet run --project backend/src/ProfitFox.Cli -- --bench http://192.168.8.163:5
 ```
 
 и прогон заканчивается таблицей наборов.
+
+## Аккаунты
+
+Раздел «Аккаунты» (`/accounts`) хранит ключи Bybit, которыми стенд торгует от имени владельца; спецификация —
+`openspec/specs/exchange-accounts`. Аккаунт добавляют по имени, ключу API и секрету; стенд спрашивает у Bybit права ключа
+(`/v5/user/query-api`) и запоминает UID аккаунта: второй ключ того же UID не принимается. Сменить ключ — удалить аккаунт и
+добавить заново. «Показать» в строке читает у Bybit свободные деньги единого аккаунта (`totalAvailableBalance`), баланс
+нигде не хранится.
+
+Подходит только ключ реального единого торгового аккаунта (UTA), без демо и testnet:
+
+- не «только чтение»;
+- права «Контракты» — «Заявки» и «Позиции» (`ContractTrade`: `Order`, `Position`); права спота не нужны и не мешают;
+- без права вывода (`Wallet`: `Withdraw`) — ключ с ним стенд отклоняет.
+
+Секрет ключа шифруется AES-256-GCM мастер-ключом сервера и лежит в базе только зашифрованным; API его не отдаёт никогда.
+Мастер-ключ — настройка `ExchangeAccounts:MasterKey`, ровно 32 байта в base64. Без неё или с ключом другого вида API не
+стартует, а сообщение называет настройку, но не значение. Worker'ам мастер-ключ не нужен. Новый ключ:
+
+```bash
+openssl rand -base64 32
+```
+
+- В разработке ключ лежит в `backend/src/ProfitFox.Presentation/appsettings.Development.json`, как пароль dev-базы; в
+  общем `appsettings.json` его нет. Тесты API берут свой ключ.
+- В production — строка `PROFIT_FOX_MASTER_KEY=<ключ>` в `~/profit-fox/.env.prod` на firebat-01 (режим 600);
+  `docker-compose.prod.yml` передаёт её API как `ExchangeAccounts__MasterKey`. Без неё `docker compose` останавливается
+  до замены контейнеров, и работающая версия остаётся на месте.
+
+Потерян или сменён мастер-ключ — секреты не читаются: баланс отвечает, что аккаунт надо добавить заново. Ключи Bybit
+перевыпускаются за минуту; ротации мастер-ключа нет.
+
+Сайт открыт в локальной сети без входа: любой в ней может добавить и удалить аккаунт. Вывести деньги ключами стенда
+нельзя — ключ с правом вывода не принимается.
 
 ## Конструктор сигналов
 
