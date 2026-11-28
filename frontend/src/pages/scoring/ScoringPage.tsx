@@ -15,7 +15,7 @@ import {
 } from '@/api/scoring';
 import { listStrategies } from '@/api/strategies';
 import { KindChoice } from '@/modules/instrument-kind/KindChoice';
-import { periods } from '@/pages/ideas/IdeaChoices';
+import { periods, storedIdeaChoices } from '@/pages/ideas/IdeaChoices';
 import { decimalText } from '@/pages/ideas/useMinScore';
 import { changeText, signedAmount, signTone } from '@/pages/market/format';
 import { timeframes } from '@/preview/preview';
@@ -24,6 +24,7 @@ import { Page, PageTitle } from '@/shared/ui/Page';
 import { SelectField } from '@/shared/ui/SelectField';
 import { Table, Td, Th, Tr } from '@/shared/ui/Table';
 import { TextField } from '@/shared/ui/TextField';
+import { useStoredState } from '@/shared/ui/useStoredState';
 
 /** A group of scores with fewer closed ideas than this is a small sample (spec idea-score «Итоги по баллу на странице «Скоринг»»). */
 export const smallSample = 30;
@@ -258,7 +259,11 @@ function WeightField({
 
 function Scores() {
   const strategies = useQuery({ queryKey: ['strategies'], queryFn: listStrategies });
-  const [choices, setChoices] = useState<IdeaChoices>({ period: 30 });
+  const [choices, setChoices] = useStoredState<IdeaChoices>(
+    'profit-fox.choices.scoring',
+    { period: 30 },
+    storedIdeaChoices,
+  );
   const set = (change: IdeaChoices) => setChoices({ ...choices, ...change });
   const scores = useQuery({
     queryKey: [...scoresKey, choices],

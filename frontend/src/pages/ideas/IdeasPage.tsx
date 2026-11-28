@@ -19,8 +19,9 @@ import { PagedTable } from '@/shared/ui/PagedTable';
 import { Pager, useLastPage } from '@/shared/ui/Pager';
 import { Tabs } from '@/shared/ui/Tabs';
 import { useListSettings } from '@/shared/ui/useListSettings';
+import { useStoredState } from '@/shared/ui/useStoredState';
 
-import { IdeaChoiceRow } from './IdeaChoices';
+import { IdeaChoiceRow, storedIdeaChoices } from './IdeaChoices';
 import { closedColumns, openColumns, summaryColumns } from './ideaColumns';
 import { ScannerBanner } from './ScannerBanner';
 import { StrategyChips } from './StrategyChips';
@@ -52,8 +53,17 @@ export function IdeasPage({
     refetchInterval: ideasRefreshMs,
   });
   const strategies = useQuery({ queryKey: ['strategies'], queryFn: listStrategies });
-  const [openChoices, setOpenChoices] = useState<IdeaChoices>({});
-  const [closedChoices, setClosedChoices] = useState<IdeaChoices>({ period: 7 });
+  // The choices of each tab are kept in the browser: the page opens with what was chosen last.
+  const [openChoices, setOpenChoices] = useStoredState<IdeaChoices>(
+    'profit-fox.choices.ideas-open',
+    {},
+    storedIdeaChoices,
+  );
+  const [closedChoices, setClosedChoices] = useStoredState<IdeaChoices>(
+    'profit-fox.choices.ideas-journal',
+    { period: 7 },
+    storedIdeaChoices,
+  );
   const filter = useChosenFilter('ideas');
   // The kind of the pair is one for both tabs and «Рынок», kept in the browser (change add-instrument-kind-filter).
   const instrumentKind = useInstrumentKind();

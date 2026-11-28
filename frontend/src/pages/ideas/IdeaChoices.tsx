@@ -5,6 +5,7 @@ import type { IdeaChoices } from '@/api/ideas';
 import { listSignals } from '@/api/signals';
 import { listStrategies } from '@/api/strategies';
 import { KindChoice } from '@/modules/instrument-kind/KindChoice';
+import { isInstrumentKind } from '@/modules/instrument-kind/useInstrumentKind';
 import { timeframes } from '@/preview/preview';
 import { SelectField } from '@/shared/ui/SelectField';
 import { TextField } from '@/shared/ui/TextField';
@@ -21,6 +22,54 @@ export const periods = [
   { days: 7, words: 'За 7 дней' },
   { days: 30, words: 'За 30 дней' },
 ] as const;
+
+const textChoices = [
+  'search',
+  'strategy',
+  'timeframe',
+  'side',
+  'label',
+  'exitReason',
+  'state',
+] as const;
+const flagChoices = ['positive', 'withStop'] as const;
+
+/**
+ * The choices above a table of ideas as the browser kept them: every known choice of the right type is taken, anything
+ * else dropped; `undefined` when the browser keeps no object.
+ */
+export function storedIdeaChoices(stored: unknown): IdeaChoices | undefined {
+  if (typeof stored !== 'object' || stored === null || Array.isArray(stored)) {
+    return undefined;
+  }
+
+  const kept = stored as Record<string, unknown>;
+  const choices: Record<string, unknown> = {};
+  textChoices.forEach((name) => {
+    if (typeof kept[name] === 'string') {
+      choices[name] = kept[name];
+    }
+  });
+  flagChoices.forEach((name) => {
+    if (typeof kept[name] === 'boolean') {
+      choices[name] = kept[name];
+    }
+  });
+  if (periods.some((period) => period.days === kept.period)) {
+    choices.period = kept.period;
+  }
+
+  if (isInstrumentKind(kept.kind)) {
+    choices.kind = kept.kind;
+  }
+
+  const minScore = leastScoreOf(kept.minScore);
+  if (minScore !== undefined) {
+    choices.minScore = minScore;
+  }
+
+  return choices as IdeaChoices;
+}
 
 /** The labels to choose from: those turned on at signals, and the burst. */
 export function useLabelChoices(): string[] {

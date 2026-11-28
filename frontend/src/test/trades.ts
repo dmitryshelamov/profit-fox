@@ -48,7 +48,7 @@ export function trade(overrides: Partial<Trade> = {}): Trade {
 /** A page of trades; the counts of the tabs are those of the rows unless given. */
 export function tradePage(
   items: readonly Trade[],
-  counts: { open?: number; closed?: number } = {},
+  counts: { open?: number; closed?: number; closedResult?: number; closedFees?: number } = {},
 ): FakeRoute {
   return () =>
     json({
@@ -58,6 +58,8 @@ export function tradePage(
       pageSize: 50,
       open: counts.open ?? items.length,
       closed: counts.closed ?? 0,
+      closedResult: counts.closedResult ?? 0,
+      closedFees: counts.closedFees ?? 0,
     } satisfies TradePage);
 }
 

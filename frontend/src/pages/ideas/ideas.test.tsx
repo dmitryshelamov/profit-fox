@@ -202,6 +202,32 @@ describe('the section «Идеи»', () => {
     expect(screen.queryByRole('table')).toBeNull();
   });
 
+  it('opens the open ideas and the journal with the choices chosen last', async () => {
+    const requests = routes();
+    const first = renderApp('/ideas');
+    await screen.findByRole('row', { name: 'SOLUSDT breakout-long 1h' });
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Сторона' }), 'short');
+    await waitFor(() =>
+      expect(
+        requests
+          .map((request) => new URL(request.url))
+          .filter((url) => url.pathname === '/api/ideas')
+          .at(-1)!
+          .searchParams.get('side'),
+      ).toBe('short'),
+    );
+    first.unmount();
+
+    const again = routes();
+    renderApp('/ideas');
+    await screen.findByRole('row', { name: 'SOLUSDT breakout-long 1h' });
+    expect(screen.getByRole('combobox', { name: 'Сторона' })).toHaveValue('short');
+    const query = again
+      .map((request) => new URL(request.url))
+      .find((url) => url.pathname === '/api/ideas')!.searchParams;
+    expect(query.get('side')).toBe('short');
+  });
+
   it('asks the open ideas with the choices and from the newest', async () => {
     const requests = routes();
     renderApp('/ideas');

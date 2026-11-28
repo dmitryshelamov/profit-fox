@@ -100,6 +100,7 @@ public sealed record TradeResponse(
     double? IdeaResult);
 
 /// <summary>
-///     A page of trades, the number of all of its tab, the page and its size, and the numbers of the open and of the closed.
+///     A page of trades, the number of all of its tab, the page and its size, the numbers of the open and of the closed, and
+///     over all the closed trades the sum of their outcomes in USDT — net of fees, with funding — and the sum of their fees.
 /// </summary>
-public sealed record TradePageResponse(IReadOnlyList<TradeResponse> Items, int Total, int Page, int PageSize, int Open, int Closed);
+public sealed record TradePageResponse(IReadOnlyList<TradeResponse> Items, int Total, int Page, int PageSize, int Open, int Closed, decimal ClosedResult, decimal ClosedFees);

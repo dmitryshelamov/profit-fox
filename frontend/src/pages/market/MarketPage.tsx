@@ -1,6 +1,6 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 
 import { ListRefused } from '@/api/lists';
 import { listMarketPairs, type MarketPair } from '@/api/market';
@@ -17,6 +17,7 @@ import { SelectField } from '@/shared/ui/SelectField';
 import { TextField } from '@/shared/ui/TextField';
 import { useListSettings } from '@/shared/ui/useListSettings';
 import { useNow } from '@/shared/ui/useNow';
+import { useStoredState } from '@/shared/ui/useStoredState';
 
 import { amountText, changeText, clockText, priceWords, rateText, signTone } from './format';
 import { IdeaBadges } from './IdeaBadges';
@@ -80,6 +81,36 @@ const columns: readonly PagedColumn<MarketPair>[] = [
   },
 ];
 
+/** The choices above the table of «Рынок» kept in the browser; the kind of the pair is kept apart (useInstrumentKind). */
+interface MarketChoices {
+  readonly search: string;
+  readonly strategy: string;
+  readonly timeframe: string;
+  readonly ideasOnly: boolean;
+}
+
+const noMarketChoices: MarketChoices = {
+  search: '',
+  strategy: '',
+  timeframe: '',
+  ideasOnly: false,
+};
+
+function storedMarketChoices(stored: unknown): MarketChoices | undefined {
+  if (typeof stored !== 'object' || stored === null) {
+    return undefined;
+  }
+
+  const kept = stored as Record<string, unknown>;
+  const text = (value: unknown) => (typeof value === 'string' ? value : '');
+  return {
+    search: text(kept.search),
+    strategy: text(kept.strategy),
+    timeframe: text(kept.timeframe),
+    ideasOnly: kept.ideasOnly === true,
+  };
+}
+
 /**
  * «Рынок» (spec market-overview «Раздел «Рынок»»): the snapshot of the perpetual USDT pairs a page at a time, sorted by
  * any column, with the choices above the table; a row opens the page of its pair. Read again every 15 seconds.
@@ -93,10 +124,17 @@ export function MarketPage({
 }) {
   const navigate = useNavigate();
   const list = useListSettings('market', { field: 'turnover24h', descending: true });
-  const [search, setSearch] = useState('');
-  const [strategy, setStrategy] = useState('');
-  const [timeframe, setTimeframe] = useState('');
-  const [ideasOnly, setIdeasOnly] = useState(false);
+  // The choices above the table are kept in the browser: the page opens with what was chosen last.
+  const [stored, store] = useStoredState<MarketChoices>(
+    'profit-fox.choices.market',
+    noMarketChoices,
+    storedMarketChoices,
+  );
+  const { search, strategy, timeframe, ideasOnly } = stored;
+  const setSearch = (value: string) => store({ ...stored, search: value });
+  const setStrategy = (value: string) => store({ ...stored, strategy: value });
+  const setTimeframe = (value: string) => store({ ...stored, timeframe: value });
+  const setIdeasOnly = (value: boolean) => store({ ...stored, ideasOnly: value });
   // One kind for «Рынок» and «Идеи», kept in the browser (change add-instrument-kind-filter).
   const instrumentKind = useInstrumentKind();
   const kind = instrumentKind.kind;

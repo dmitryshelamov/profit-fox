@@ -2,8 +2,8 @@ import { Link } from '@tanstack/react-router';
 import type { ReactNode } from 'react';
 
 import type { Halt, RiskState } from '@/api/risk';
-import { momentText } from '@/pages/market/format';
-import { amountWords, lossWords, plural } from '@/pages/trades/format';
+import { momentText, signTone } from '@/pages/market/format';
+import { amountWords, lossWords, plural, signedUsdt } from '@/pages/trades/format';
 
 function Cell({
   title,
@@ -37,9 +37,16 @@ const share = (value: number, limit: number | string | null | undefined) =>
 
 /**
  * The state of the risk module (spec trade-risk «Состояние риска», «Полоса риска»): the loss of the day, the open trades
- * and the sum in trades, each beside its limit, and the trading Worker with the streams of Bybit.
+ * and the sum in trades, each beside its limit, and the trading Worker with the streams of Bybit. «Сделки» gives `closed`:
+ * the net outcome of all the closed trades — fees taken off, funding in — with the fees in brackets, beside the loss.
  */
-export function RiskStrip({ state }: { readonly state: RiskState }) {
+export function RiskStrip({
+  state,
+  closed,
+}: {
+  readonly state: RiskState;
+  readonly closed?: { readonly result: number | string; readonly fees: number | string };
+}) {
   const dayLoss = Number(state.dayLoss);
   const streamed = Number(state.streamed);
   return (
@@ -52,6 +59,16 @@ export function RiskStrip({ state }: { readonly state: RiskState }) {
           {lossWords(dayLoss)} из {lossWords(state.dayLimit)} USDT
         </span>
       </Cell>
+      {closed !== undefined && (
+        <Cell title="Итог закрытых · чистыми">
+          <span data-testid="closed-result">
+            <span className={signTone(closed.result)}>{signedUsdt(closed.result)} USDT</span>{' '}
+            <span className="text-sm font-normal text-muted">
+              (комиссия {Number(closed.fees).toFixed(2)})
+            </span>
+          </span>
+        </Cell>
+      )}
       <Cell title="Открытые сделки" ratio={share(Number(state.openTrades), state.maxOpenTrades)}>
         {String(state.openTrades)} из {String(state.maxOpenTrades ?? '—')}
       </Cell>

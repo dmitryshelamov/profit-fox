@@ -119,7 +119,14 @@ export function TradesPage({
       )}
       {risk.data &&
         (risk.data.limitsSet ? (
-          <RiskStrip state={risk.data} />
+          <RiskStrip
+            state={risk.data}
+            closed={
+              counts === undefined
+                ? undefined
+                : { result: counts.closedResult, fees: counts.closedFees }
+            }
+          />
         ) : (
           <p
             role="status"

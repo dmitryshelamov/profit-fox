@@ -53,6 +53,18 @@ describe('the section «Сделки»', () => {
     expect(screen.getByRole('tab', { name: /Закрытые/ })).toHaveTextContent('37');
   });
 
+  // Scenario «Итог закрытых сделок».
+  it('shows beside the loss of the day the net outcome of the closed trades with their fees in brackets', async () => {
+    routes({
+      'GET /api/trades': tradePage([trade()], { closed: 37, closedResult: -12.5, closedFees: 8.4 }),
+    });
+    renderApp('/trades');
+
+    const total = await screen.findByTestId('closed-result');
+    expect(total).toHaveTextContent('-12.50 USDT (комиссия 8.40)');
+    expect(within(total).getByText('-12.50 USDT')).toHaveClass('text-err');
+  });
+
   it('shows a losing result red and the stop at the limit with its percent', async () => {
     routes({
       'GET /api/trades': tradePage([

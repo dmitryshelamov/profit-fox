@@ -14,14 +14,15 @@ namespace ProfitFox.Application.Queries.Trades;
 ///     A page of the open trades — every state that holds its pair — or of the closed and cancelled ones (change
 ///     take-idea-trades, design.md, decision 13; spec idea-trades «Раздел „Сделки“»), sorted by a column of
 ///     <see cref="ListFields.Trades" />: the open by the click from the newest by default, the closed by the exit. With the
-///     numbers of both tabs.
+///     numbers of both tabs and the sums of the outcomes and of the fees of the closed trades.
 /// </summary>
 public sealed record GetTradesQuery(bool Open, ListRequest List) : IRequest<TradeListResult>;
 
 /// <summary>
-///     A page of trades and the numbers of the open and of the closed.
+///     A page of trades, the numbers of the open and of the closed, and over the closed the sum of the outcomes — net of
+///     fees — and of the fees.
 /// </summary>
-public sealed record TradeListResult(ListPage<TradeListItem> Page, int Open, int Closed);
+public sealed record TradeListResult(ListPage<TradeListItem> Page, int Open, int Closed, decimal ClosedResult, decimal ClosedFees);
 
 /// <summary>
 ///     One trade by its id.
@@ -35,8 +36,8 @@ internal sealed class GetTradesQueryHandler(ITradeRepository trades) : IRequestH
     {
         ListOrder order = FilterResolver.Order(ListFields.Trades, request.Open ? "created" : "exitTime", request.List);
         ListPage<TradeListItem> page = await trades.ListAsync(new TradeListQuery(request.Open, order), cancellationToken);
-        (int open, int closed) = await trades.CountsAsync(cancellationToken);
-        return new TradeListResult(page, open, closed);
+        (int open, int closed, decimal result, decimal fees) = await trades.CountsAsync(cancellationToken);
+        return new TradeListResult(page, open, closed, result, fees);
     }
 
     /// <exception cref="KeyNotFoundException">There is no trade of the id.</exception>
