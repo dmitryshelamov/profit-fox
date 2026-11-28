@@ -122,7 +122,7 @@ describe('the score in «Идеи»', () => {
     renderApp('/ideas');
     await screen.findByRole('row', { name: 'SOLUSDT breakout-long 1h' });
 
-    await userEvent.type(screen.getByRole('spinbutton', { name: 'Балл от' }), '2');
+    await userEvent.type(screen.getByRole('textbox', { name: 'Балл от' }), '2');
     await waitFor(() =>
       expect(queriesOf(requests, '/api/ideas').at(-1)!.get('minScore')).toBe('2'),
     );
@@ -135,7 +135,7 @@ describe('the score in «Идеи»', () => {
     await waitFor(() =>
       expect(queriesOf(requests, '/api/ideas/summary').at(-1)!.get('minScore')).toBe('2'),
     );
-    expect(screen.getByRole('spinbutton', { name: 'Балл от' })).toHaveValue(2);
+    expect(screen.getByRole('textbox', { name: 'Балл от' })).toHaveValue('2');
     expect(localStorage.getItem(minScoreKey)).toBe('2');
   });
 
@@ -145,10 +145,10 @@ describe('the score in «Идеи»', () => {
     renderApp('/ideas');
     await screen.findByRole('row', { name: 'SOLUSDT breakout-long 1h' });
 
-    expect(screen.getByRole('spinbutton', { name: 'Балл от' })).toHaveValue(-1);
+    expect(screen.getByRole('textbox', { name: 'Балл от' })).toHaveValue('-1');
     expect(queriesOf(requests, '/api/ideas').at(-1)!.get('minScore')).toBe('-1');
 
-    await userEvent.clear(screen.getByRole('spinbutton', { name: 'Балл от' }));
+    await userEvent.clear(screen.getByRole('textbox', { name: 'Балл от' }));
 
     await waitFor(() =>
       expect(queriesOf(requests, '/api/ideas').at(-1)!.has('minScore')).toBe(false),
@@ -161,8 +161,8 @@ describe('the score in «Идеи»', () => {
     const requests = routes();
     renderApp('/ideas');
     await screen.findByRole('row', { name: 'SOLUSDT breakout-long 1h' });
-    const field = screen.getByRole('spinbutton', { name: 'Балл от' });
-    expect(field).toHaveAttribute('step', '0.01');
+    const field = screen.getByRole('textbox', { name: 'Балл от' });
+    expect(field).toHaveAttribute('inputmode', 'decimal');
 
     await userEvent.type(field, '1.25');
     await waitFor(() =>
@@ -171,7 +171,7 @@ describe('the score in «Идеи»', () => {
     expect(localStorage.getItem(minScoreKey)).toBe('1.25');
     await userEvent.type(field, '5');
 
-    expect(field).toHaveValue(1.255);
+    expect(field).toHaveValue('1.255');
     expect(field).toHaveAttribute('aria-invalid', 'true');
     expect(
       queriesOf(requests, '/api/ideas')
@@ -181,20 +181,34 @@ describe('the score in «Идеи»', () => {
     expect(localStorage.getItem(minScoreKey)).toBe('1.25');
   });
 
+  // A Russian keyboard types a decimal comma.
+  it('takes a least score typed with a comma', async () => {
+    const requests = routes();
+    renderApp('/ideas');
+    await screen.findByRole('row', { name: 'SOLUSDT breakout-long 1h' });
+
+    await userEvent.type(screen.getByRole('textbox', { name: 'Балл от' }), '0,5');
+
+    await waitFor(() =>
+      expect(queriesOf(requests, '/api/ideas').at(-1)!.get('minScore')).toBe('0.5'),
+    );
+    expect(localStorage.getItem(minScoreKey)).toBe('0.5');
+  });
+
   // Risk 3 of change decimal-label-weights: the whole number kept before reads as the same number.
   it('starts with a whole number kept before the scores had hundredths, and with a number with hundredths', async () => {
     localStorage.setItem(minScoreKey, '3');
     const requests = routes();
     const { unmount } = renderApp('/ideas');
     await screen.findByRole('row', { name: 'SOLUSDT breakout-long 1h' });
-    expect(screen.getByRole('spinbutton', { name: 'Балл от' })).toHaveValue(3);
+    expect(screen.getByRole('textbox', { name: 'Балл от' })).toHaveValue('3');
     expect(queriesOf(requests, '/api/ideas').at(-1)!.get('minScore')).toBe('3');
     unmount();
 
     localStorage.setItem(minScoreKey, '-0.75');
     renderApp('/ideas');
     await screen.findByRole('row', { name: 'SOLUSDT breakout-long 1h' });
-    expect(screen.getByRole('spinbutton', { name: 'Балл от' })).toHaveValue(-0.75);
+    expect(screen.getByRole('textbox', { name: 'Балл от' })).toHaveValue('-0.75');
     expect(queriesOf(requests, '/api/ideas').at(-1)!.get('minScore')).toBe('-0.75');
   });
 
@@ -210,7 +224,7 @@ describe('the score in «Идеи»', () => {
     renderApp('/ideas');
     await screen.findByRole('row', { name: 'SOLUSDT breakout-long 1h' });
 
-    await userEvent.type(screen.getByRole('spinbutton', { name: 'Балл от' }), '3');
+    await userEvent.type(screen.getByRole('textbox', { name: 'Балл от' }), '3');
 
     await waitFor(() =>
       expect(queriesOf(requests, '/api/ideas/strategies').at(-1)!.get('minScore')).toBe('3'),

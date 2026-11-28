@@ -16,6 +16,7 @@ import {
 import { listStrategies } from '@/api/strategies';
 import { KindChoice } from '@/modules/instrument-kind/KindChoice';
 import { periods } from '@/pages/ideas/IdeaChoices';
+import { decimalText } from '@/pages/ideas/useMinScore';
 import { changeText, signedAmount, signTone } from '@/pages/market/format';
 import { timeframes } from '@/preview/preview';
 import { Badge } from '@/shared/ui/Badge';
@@ -111,9 +112,13 @@ function Weights() {
 // outcomes by score (scenario «Правка веса»). A refusal remounts the fields, so they show the weights of the row again.
 function WeightRow({ row }: { readonly row: ScoringLabel }) {
   const client = useQueryClient();
+  // The weights last sent: a second weight typed while the first is being saved goes with the first, not with the weight
+  // of the row before it, or the second save would put the first weight back. A refusal forgets them.
+  const sent = useRef<{ long: number; short: number } | null>(null);
   const [refusals, setRefusals] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const refused = (why: string) => {
+    sent.current = null;
     setError(why);
     setRefusals((count) => count + 1);
   };
@@ -146,7 +151,11 @@ function WeightRow({ row }: { readonly row: ScoringLabel }) {
   });
   const long = Number(row.longWeight);
   const short = Number(row.shortWeight);
-  const choose = (next: { long: number; short: number }) => save.mutate(next);
+  const choose = (change: { long?: number; short?: number }) => {
+    const next = { ...(sent.current ?? { long, short }), ...change };
+    sent.current = next;
+    save.mutate(next);
+  };
 
   return (
     <Tr className="h-12" aria-label={row.text}>
@@ -170,7 +179,7 @@ function WeightRow({ row }: { readonly row: ScoringLabel }) {
           label={`Вес лонга ${row.text}`}
           value={long}
           failed={error !== null}
-          onCommit={(value) => choose({ long: value, short })}
+          onCommit={(value) => choose({ long: value })}
         />
       </Td>
       <Td>
@@ -179,7 +188,7 @@ function WeightRow({ row }: { readonly row: ScoringLabel }) {
           label={`Вес шорта ${row.text}`}
           value={short}
           failed={error !== null}
-          onCommit={(value) => choose({ long, short: value })}
+          onCommit={(value) => choose({ short: value })}
         />
       </Td>
       <Td className="text-right text-[12px] text-err">
@@ -215,7 +224,7 @@ function WeightField({
   const [text, setText] = useState(String(value));
   const sent = useRef<number | null>(null);
   const commit = () => {
-    const next = Number(text);
+    const next = Number(decimalText(text));
     if (text.trim() === '' || !Number.isFinite(next)) {
       setText(String(value));
       return;
@@ -235,13 +244,10 @@ function WeightField({
   return (
     <TextField
       mono
-      type="number"
-      step="0.01"
-      min="-100"
-      max="100"
+      inputMode="decimal"
       aria-label={label}
       aria-invalid={failed}
-      className={`w-[104px] ${fieldTone[scoreTone(text.trim() === '' ? value : text)] ?? ''}`}
+      className={`w-[104px] ${fieldTone[scoreTone(text.trim() === '' ? value : decimalText(text))] ?? ''}`}
       value={text}
       onChange={(event) => setText(event.target.value)}
       onKeyDown={onKeyDown}

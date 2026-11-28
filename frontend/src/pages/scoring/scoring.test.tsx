@@ -63,7 +63,7 @@ function routes(extra: Record<string, FakeRoute> = {}) {
 
 // Types into the field of a weight in place of its number.
 async function type(name: string, text: string) {
-  const field = screen.getByRole('spinbutton', { name });
+  const field = screen.getByRole('textbox', { name });
   await userEvent.clear(field);
   await userEvent.type(field, text);
 }
@@ -95,14 +95,13 @@ describe('the section «Скоринг»', () => {
     expect(within(rows[0]!).getByText('btc-down-4h')).toBeInTheDocument();
     expect(within(rows[2]!).getByText('выключена')).toBeInTheDocument();
     expect(within(rows[3]!).getByText('встроенная метка')).toBeInTheDocument();
-    expect(table.getByRole('spinbutton', { name: 'Вес лонга оборот ↑ 1h' })).toHaveValue(1);
-    // Change decimal-label-weights, task 4.3 (design.md, decision 5): a weight is a number in hundredths from −100 to +100.
-    const field = table.getByRole('spinbutton', { name: 'Вес шорта ↓ BTC 4h' });
-    expect([
-      field.getAttribute('step'),
-      field.getAttribute('min'),
-      field.getAttribute('max'),
-    ]).toEqual(['0.01', '-100', '100']);
+    expect(table.getByRole('textbox', { name: 'Вес лонга оборот ↑ 1h' })).toHaveValue('1');
+    // Change decimal-label-weights, task 4.3 (design.md, decision 5): a weight is typed as a decimal number; the range and
+    // the hundredths are the server's to check (scenario «Вес дальше сотых»).
+    expect(table.getByRole('textbox', { name: 'Вес шорта ↓ BTC 4h' })).toHaveAttribute(
+      'inputmode',
+      'decimal',
+    );
   });
 
   // Scenario «Правка веса» (change decimal-label-weights, task 4.3): a number typed in the row is saved by Enter.
@@ -115,14 +114,14 @@ describe('the section «Скоринг»', () => {
     await screen.findByRole('table', { name: 'Итоги по баллу' });
     const before = queriesOf(requests, '/api/ideas/scores').length;
 
-    const field = screen.getByRole('spinbutton', { name: 'Вес лонга ↓ BTC 4h' });
+    const field = screen.getByRole('textbox', { name: 'Вес лонга ↓ BTC 4h' });
     await userEvent.clear(field);
     await userEvent.type(field, '-0.5{Enter}');
 
     await waitFor(() =>
-      expect(
-        screen.getByRole('spinbutton', { name: 'Вес лонга ↓ BTC 4h' }).parentElement,
-      ).toHaveClass('[&>input]:text-err'),
+      expect(screen.getByRole('textbox', { name: 'Вес лонга ↓ BTC 4h' }).parentElement).toHaveClass(
+        '[&>input]:text-err',
+      ),
     );
     expect(await bodiesOf(requests, 'PUT', '/api/scoring/weights')).toEqual([
       { text: '↓ BTC 4h', longWeight: -0.5, shortWeight: 0 },
@@ -130,7 +129,7 @@ describe('the section «Скоринг»', () => {
     await waitFor(() =>
       expect(queriesOf(requests, '/api/ideas/scores').length).toBeGreaterThan(before),
     );
-    expect(screen.getByRole('spinbutton', { name: 'Вес лонга ↓ BTC 4h' })).toHaveValue(-0.5);
+    expect(screen.getByRole('textbox', { name: 'Вес лонга ↓ BTC 4h' })).toHaveValue('-0.5');
     await userEvent.tab();
     expect(await bodiesOf(requests, 'PUT', '/api/scoring/weights')).toHaveLength(1);
   });
@@ -150,7 +149,7 @@ describe('the section «Скоринг»', () => {
     renderApp('/scoring');
     await screen.findByRole('table', { name: 'Веса меток' });
 
-    const field = screen.getByRole('spinbutton', { name: 'Вес шорта оборот ↑ 1h' });
+    const field = screen.getByRole('textbox', { name: 'Вес шорта оборот ↑ 1h' });
     await userEvent.clear(field);
     await userEvent.type(field, '0.25');
     await userEvent.tab();
@@ -161,7 +160,72 @@ describe('the section «Скоринг»', () => {
       ]),
     );
     await waitFor(() =>
-      expect(screen.getByRole('spinbutton', { name: 'Вес шорта оборот ↑ 1h' })).toHaveValue(0.25),
+      expect(screen.getByRole('textbox', { name: 'Вес шорта оборот ↑ 1h' })).toHaveValue('0.25'),
+    );
+  });
+
+  // A Russian keyboard types a decimal comma.
+  it('reads a weight typed with a comma', async () => {
+    const requests = routes({
+      'PUT /api/scoring/weights': () =>
+        json(label({ text: '↓ BTC 4h', timeframe: '4h', signal: 'btc-down-4h', longWeight: 0.25 })),
+    });
+    renderApp('/scoring');
+    await screen.findByRole('table', { name: 'Веса меток' });
+
+    const field = screen.getByRole('textbox', { name: 'Вес лонга ↓ BTC 4h' });
+    await userEvent.clear(field);
+    await userEvent.type(field, '0,25{Enter}');
+
+    await waitFor(async () =>
+      expect(await bodiesOf(requests, 'PUT', '/api/scoring/weights')).toEqual([
+        { text: '↓ BTC 4h', longWeight: 0.25, shortWeight: 0 },
+      ]),
+    );
+  });
+
+  // Review of change decimal-label-weights: the short typed while the long is being saved keeps the long typed.
+  it('sends the long typed before with the short typed while the long is being saved', async () => {
+    let answer: (() => void) | undefined;
+    const requests = routes({
+      'PUT /api/scoring/weights': async (request) => {
+        const body = (await request.json()) as { longWeight: number; shortWeight: number };
+        if (answer === undefined) {
+          await new Promise<void>((resolve) => {
+            answer = resolve;
+          });
+        }
+        return json(
+          label({
+            text: '↓ BTC 4h',
+            timeframe: '4h',
+            signal: 'btc-down-4h',
+            longWeight: body.longWeight,
+            shortWeight: body.shortWeight,
+          }),
+        );
+      },
+    });
+    renderApp('/scoring');
+    await screen.findByRole('table', { name: 'Веса меток' });
+
+    const long = screen.getByRole('textbox', { name: 'Вес лонга ↓ BTC 4h' });
+    await userEvent.clear(long);
+    await userEvent.type(long, '1.5{Enter}');
+    await waitFor(() => expect(answer).toBeDefined());
+    const short = screen.getByRole('textbox', { name: 'Вес шорта ↓ BTC 4h' });
+    await userEvent.clear(short);
+    await userEvent.type(short, '2{Enter}');
+    answer!();
+
+    await waitFor(async () =>
+      expect(await bodiesOf(requests, 'PUT', '/api/scoring/weights')).toEqual([
+        { text: '↓ BTC 4h', longWeight: 1.5, shortWeight: 0 },
+        { text: '↓ BTC 4h', longWeight: 1.5, shortWeight: 2 },
+      ]),
+    );
+    await waitFor(() =>
+      expect(screen.getByRole('textbox', { name: 'Вес лонга ↓ BTC 4h' })).toHaveValue('1.5'),
     );
   });
 
@@ -171,16 +235,16 @@ describe('the section «Скоринг»', () => {
     renderApp('/scoring');
     await screen.findByRole('table', { name: 'Веса меток' });
 
-    await userEvent.click(screen.getByRole('spinbutton', { name: 'Вес лонга оборот ↑ 1h' }));
+    await userEvent.click(screen.getByRole('textbox', { name: 'Вес лонга оборот ↑ 1h' }));
     await userEvent.tab();
-    const field = screen.getByRole('spinbutton', { name: 'Вес шорта фандинг' });
+    const field = screen.getByRole('textbox', { name: 'Вес шорта фандинг' });
     await userEvent.clear(field);
     await userEvent.type(field, '0.00{Enter}');
     await userEvent.clear(field);
     await userEvent.tab();
 
     expect(await bodiesOf(requests, 'PUT', '/api/scoring/weights')).toEqual([]);
-    expect(screen.getByRole('spinbutton', { name: 'Вес шорта фандинг' })).toHaveValue(0);
+    expect(screen.getByRole('textbox', { name: 'Вес шорта фандинг' })).toHaveValue('0');
   });
 
   // Scenario «Отказ сервера».
@@ -209,7 +273,7 @@ describe('the section «Скоринг»', () => {
     expect(await within(row).findByRole('alert')).toHaveTextContent(
       'Вес не сохранён: вес от −100 до +100, не больше двух знаков после точки. Стоит прежний вес.',
     );
-    expect(within(row).getByRole('spinbutton', { name: 'Вес шорта фандинг' })).toHaveValue(0);
+    expect(within(row).getByRole('textbox', { name: 'Вес шорта фандинг' })).toHaveValue('0');
   });
 
   it('keeps the weight before when the server does not answer', async () => {
@@ -223,7 +287,7 @@ describe('the section «Скоринг»', () => {
     expect(await within(row).findByRole('alert')).toHaveTextContent(
       'Вес не сохранён: сервер не ответил. Стоит прежний вес.',
     );
-    expect(within(row).getByRole('spinbutton', { name: 'Вес лонга ⚡ всплеск' })).toHaveValue(0);
+    expect(within(row).getByRole('textbox', { name: 'Вес лонга ⚡ всплеск' })).toHaveValue('0');
   });
 
   // Task 8.7 (review, P3): the label is gone — renamed or its signal deleted — while the page was open.
@@ -244,7 +308,7 @@ describe('the section «Скоринг»', () => {
     await waitFor(() =>
       expect(queriesOf(requests, '/api/scoring/labels').length).toBeGreaterThan(before),
     );
-    expect(within(row).getByRole('spinbutton', { name: 'Вес шорта фандинг' })).toHaveValue(0);
+    expect(within(row).getByRole('textbox', { name: 'Вес шорта фандинг' })).toHaveValue('0');
   });
 
   // Scenario «Меток нет».

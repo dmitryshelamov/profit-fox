@@ -234,10 +234,10 @@ function MinScoreField({
     }
   }
 
-  const typed = (next: string, unfinished: boolean) => {
+  const typed = (next: string) => {
     setText(next);
     const least = leastScoreOf(next);
-    if (next.trim() === '' && !unfinished) {
+    if (next.trim() === '') {
       onChange(undefined);
     } else if (least !== undefined && least !== minScore) {
       onChange(least);
@@ -248,15 +248,14 @@ function MinScoreField({
   return (
     <TextField
       mono
-      type="number"
-      step="0.01"
+      inputMode="decimal"
       sign="Балл от"
       placeholder="все"
       aria-label="Балл от"
       aria-invalid={wrong}
       className="w-[150px]"
       value={text}
-      onChange={(event) => typed(event.target.value, event.target.validity.badInput)}
+      onChange={(event) => typed(event.target.value)}
     />
   );
 }

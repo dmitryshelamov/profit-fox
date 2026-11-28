@@ -5,7 +5,7 @@ export const minScoreKey = 'profit-fox.min-score';
 
 /**
  * The least score of the text typed in «Балл от» (change decimal-label-weights, design.md, decision 5): a number with at
- * most two digits after the point, as the server takes it; `undefined` for anything else. A whole number kept before the
+ * most two digits after the point, as the server takes it, with a point or a comma; `undefined` for anything else. A whole number kept before the
  * scores had hundredths reads as the same number (risk 3).
  */
 export function leastScoreOf(value: unknown): number | undefined {
@@ -13,9 +13,17 @@ export function leastScoreOf(value: unknown): number | undefined {
     return undefined;
   }
 
-  const text = String(value).trim();
+  const text = decimalText(String(value));
   const number = Number(text);
   return /^-?\d+(\.\d{1,2})?$/.test(text) && Number.isFinite(number) ? number : undefined;
+}
+
+/**
+ * A number as typed in a field of a score or a weight: spaces around dropped, a decimal comma read as a point and the
+ * typographic minus as a hyphen, so «−0,5» reads as `-0.5` (a Russian keyboard types a comma).
+ */
+export function decimalText(text: string): string {
+  return text.trim().replace(',', '.').replace('−', '-');
 }
 
 /** The event that tells the other tables of this tab the score chosen; the event `storage` tells other tabs. */
