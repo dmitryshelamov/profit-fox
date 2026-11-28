@@ -22,10 +22,23 @@ export async function written<T>(result: {
   if (
     (status === 400 || status === 409 || status === 422) &&
     result.error &&
-    typeof result.error === 'object' &&
-    'errors' in result.error
+    typeof result.error === 'object'
   ) {
-    return { ok: false, errors: (result.error as { errors: RequestError[] }).errors };
+    const body = result.error as { errors?: unknown; detail?: string; title?: string };
+    if (Array.isArray(body.errors)) {
+      return { ok: false, errors: body.errors as RequestError[] };
+    }
+
+    // Another body — such as the validation problem of ASP.NET, whose errors are an object — is one general refusal, not a
+    // list to filter (review R2).
+    if ('errors' in body || body.detail !== undefined || body.title !== undefined) {
+      return {
+        ok: false,
+        errors: [
+          { code: 'Refused', reason: body.detail ?? body.title ?? result.response.statusText },
+        ],
+      };
+    }
   }
 
   return { ok: true, value: unwrap(result) };

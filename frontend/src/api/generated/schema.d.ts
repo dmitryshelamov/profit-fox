@@ -452,6 +452,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/risk/state": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetRiskState"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/risk/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetRiskSettings"];
+        put: operations["SaveRiskSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/risk/halt/lift": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["LiftHalt"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/scoring/labels": {
         parameters: {
             query?: never;
@@ -660,6 +708,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/trades/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["PreviewEntry"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trades": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["ListTrades"];
+        put?: never;
+        post: operations["OpenTrade"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trades/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetTrade"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trades/{id}/close": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["CloseTrade"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trades/{id}/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["ResolveTrade"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -809,6 +937,71 @@ export interface components {
             };
             kind?: null | string;
         };
+        EntryCheckResponse: {
+            code: string;
+            passed: boolean;
+            text: string;
+        };
+        EntryPreviewResponse: {
+            side: string;
+            /** Format: double */
+            price: number | string;
+            /** Format: double */
+            amount: number | string;
+            /** Format: int32 */
+            leverage: number | string;
+            /** Format: double */
+            quantity: number | string;
+            /** Format: double */
+            value: number | string;
+            /** Format: double */
+            margin: number | string;
+            /** Format: double */
+            ideaEntry: number | string;
+            /** Format: double */
+            ideaStop: null | number | string;
+            /** Format: double */
+            ideaTarget: null | number | string;
+            /** Format: double */
+            stop: null | number | string;
+            stopSource: null | string;
+            /** Format: double */
+            limitStop: null | number | string;
+            /** Format: double */
+            stopDistance: null | number | string;
+            /** Format: double */
+            target: null | number | string;
+            /** Format: double */
+            targetDistance: null | number | string;
+            /** Format: double */
+            lossAtStop: null | number | string;
+            /** Format: double */
+            profitAtTarget: null | number | string;
+            /** Format: double */
+            liquidation: number | string;
+            /** Format: double */
+            needed: number | string;
+            /** Format: int64 */
+            until: number | string;
+            /** Format: uuid */
+            accountId: null | string;
+            accountName: null | string;
+            /** Format: double */
+            free: null | number | string;
+            checks: components["schemas"]["EntryCheckResponse"][];
+            passed: boolean;
+        };
+        EntryRefusedResponse: {
+            checks: components["schemas"]["EntryCheckResponse"][];
+        };
+        EntryRequest: {
+            /** Format: uuid */
+            ideaId: string;
+            /** Format: uuid */
+            accountId: null | string;
+            /** Format: double */
+            amount: null | number | string;
+        };
         ErrorResponse: {
             errors: components["schemas"]["RequestError"][];
         };
@@ -857,6 +1050,17 @@ export interface components {
             name: string;
             place: string;
             conditions: components["schemas"]["FilterConditionDto"][];
+        };
+        HaltResponse: {
+            /** Format: int64 */
+            haltedAt: null | number | string;
+            /** Format: double */
+            loss: null | number | string;
+            /** Format: double */
+            limit: null | number | string;
+            notClosed: string[];
+            /** Format: int64 */
+            liftedAt: null | number | string;
         };
         IdeaBadgeResponse: {
             strategy: string;
@@ -917,6 +1121,7 @@ export interface components {
             excluded: null | string;
             /** Format: double */
             score: number | string;
+            trade?: null | components["schemas"]["IdeaTradeResponse"];
         };
         IdeaScoreResponse: {
             /** Format: double */
@@ -972,6 +1177,11 @@ export interface components {
             mean: number | string;
             /** Format: double */
             sum: number | string;
+        };
+        IdeaTradeResponse: {
+            /** Format: uuid */
+            id: string;
+            state: string;
         };
         InstrumentResponse: {
             id: string;
@@ -1079,6 +1289,13 @@ export interface components {
             name: string;
             type: string;
             many?: boolean;
+        };
+        PolledAccountResponse: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** Format: int64 */
+            since: number | string;
         };
         PreviewCandle: {
             /** Format: int64 */
@@ -1227,6 +1444,34 @@ export interface components {
         RequestWire: {
             from: string;
             to: string;
+        };
+        RiskStateResponse: {
+            limitsSet: boolean;
+            missing: string[];
+            /** Format: double */
+            dayLoss: number | string;
+            /** Format: double */
+            daySum: number | string;
+            /** Format: double */
+            dayLimit: null | number | string;
+            /** Format: int64 */
+            dayFrom: number | string;
+            /** Format: int32 */
+            openTrades: number | string;
+            /** Format: int32 */
+            maxOpenTrades: null | number | string;
+            /** Format: double */
+            openAmount: number | string;
+            /** Format: double */
+            maxTotalAmount: null | number | string;
+            halt: components["schemas"]["HaltResponse"];
+            traderAlive: boolean;
+            trader: null | string;
+            /** Format: int32 */
+            accounts: number | string;
+            /** Format: int32 */
+            streamed: number | string;
+            polled: components["schemas"]["PolledAccountResponse"][];
         };
         SaveFilterRequest: {
             name: null | string;
@@ -1418,6 +1663,132 @@ export interface components {
             errors: components["schemas"]["RequestError"][];
             signals: components["schemas"]["SignalUseResponse"][];
         };
+        TradePageResponse: {
+            items: components["schemas"]["TradeResponse"][];
+            /** Format: int32 */
+            total: number | string;
+            /** Format: int32 */
+            page: number | string;
+            /** Format: int32 */
+            pageSize: number | string;
+            /** Format: int32 */
+            open: number | string;
+            /** Format: int32 */
+            closed: number | string;
+        };
+        TradeResponse: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            ideaId: string;
+            symbol: string;
+            side: string;
+            strategy: string;
+            /** Format: int32 */
+            version: number | string;
+            timeframe: string;
+            /** Format: int64 */
+            ideaMoment: number | string;
+            /** Format: int64 */
+            until: number | string;
+            /** Format: double */
+            ideaEntry: number | string;
+            /** Format: uuid */
+            accountId: null | string;
+            accountName: string;
+            /** Format: double */
+            amount: number | string;
+            /** Format: int32 */
+            leverage: number | string;
+            /** Format: double */
+            clickPrice: number | string;
+            /** Format: double */
+            quantity: number | string;
+            /** Format: double */
+            held: number | string;
+            /** Format: double */
+            stop: number | string;
+            stopSource: string;
+            /** Format: double */
+            target: null | number | string;
+            state: string;
+            reason: null | string;
+            closeReason: null | string;
+            /** Format: double */
+            entryPrice: null | number | string;
+            /** Format: double */
+            exitPrice: null | number | string;
+            /** Format: double */
+            fees: number | string;
+            /** Format: double */
+            funding: number | string;
+            /** Format: double */
+            result: null | number | string;
+            /** Format: double */
+            resultShare: null | number | string;
+            /** Format: double */
+            unrealised: null | number | string;
+            /** Format: int64 */
+            markedAt: null | number | string;
+            /** Format: int64 */
+            createdAt: number | string;
+            /** Format: int64 */
+            openedAt: null | number | string;
+            /** Format: int64 */
+            closedAt: null | number | string;
+            /** Format: double */
+            ideaResult: null | number | string;
+        };
+        TradeSettingsRequest: {
+            /** Format: uuid */
+            defaultAccountId: null | string;
+            /** Format: double */
+            defaultAmount: null | number | string;
+            /** Format: int32 */
+            leverage: null | number | string;
+            /** Format: double */
+            maxAmount: null | number | string;
+            /** Format: int32 */
+            maxOpenTrades: null | number | string;
+            /** Format: double */
+            maxTotalAmount: null | number | string;
+            /** Format: double */
+            maxLossPercent: null | number | string;
+            /** Format: double */
+            maxDayLoss: null | number | string;
+            /** Format: int32 */
+            expiryMarginMinutes: null | number | string;
+            /** Format: int32 */
+            entryWaitSeconds: null | number | string;
+            /** Format: int32 */
+            stopAttempts: null | number | string;
+        };
+        TradeSettingsResponse: {
+            /** Format: uuid */
+            defaultAccountId: null | string;
+            /** Format: double */
+            defaultAmount: null | number | string;
+            /** Format: int32 */
+            leverage: null | number | string;
+            /** Format: double */
+            maxAmount: null | number | string;
+            /** Format: int32 */
+            maxOpenTrades: null | number | string;
+            /** Format: double */
+            maxTotalAmount: null | number | string;
+            /** Format: double */
+            maxLossPercent: null | number | string;
+            /** Format: double */
+            maxDayLoss: null | number | string;
+            /** Format: int32 */
+            expiryMarginMinutes: number | string;
+            /** Format: int32 */
+            entryWaitSeconds: number | string;
+            /** Format: int32 */
+            stopAttempts: number | string;
+            /** Format: int64 */
+            savedAt: null | number | string;
+        };
         ValidateGraphRequest: {
             graph: null | components["schemas"]["JsonElement"];
         };
@@ -1592,6 +1963,17 @@ export interface operations {
             };
             /** @description Not Found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ProblemDetails"];
+                    "application/json": components["schemas"]["ProblemDetails"];
+                    "text/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2847,6 +3229,122 @@ export interface operations {
             };
         };
     };
+    GetRiskState: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["RiskStateResponse"];
+                    "application/json": components["schemas"]["RiskStateResponse"];
+                    "text/json": components["schemas"]["RiskStateResponse"];
+                };
+            };
+        };
+    };
+    GetRiskSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["TradeSettingsResponse"];
+                    "application/json": components["schemas"]["TradeSettingsResponse"];
+                    "text/json": components["schemas"]["TradeSettingsResponse"];
+                };
+            };
+        };
+    };
+    SaveRiskSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TradeSettingsRequest"];
+                "text/json": components["schemas"]["TradeSettingsRequest"];
+                "application/*+json": components["schemas"]["TradeSettingsRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["TradeSettingsResponse"];
+                    "application/json": components["schemas"]["TradeSettingsResponse"];
+                    "text/json": components["schemas"]["TradeSettingsResponse"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ErrorResponse"];
+                    "application/json": components["schemas"]["ErrorResponse"];
+                    "text/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    LiftHalt: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["HaltResponse"];
+                    "application/json": components["schemas"]["HaltResponse"];
+                    "text/json": components["schemas"]["HaltResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ProblemDetails"];
+                    "application/json": components["schemas"]["ProblemDetails"];
+                    "text/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     ListScoringLabels: {
         parameters: {
             query?: never;
@@ -3661,6 +4159,329 @@ export interface operations {
                     "text/plain": components["schemas"]["StrategyValidationResponse"];
                     "application/json": components["schemas"]["StrategyValidationResponse"];
                     "text/json": components["schemas"]["StrategyValidationResponse"];
+                };
+            };
+        };
+    };
+    PreviewEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EntryRequest"];
+                "text/json": components["schemas"]["EntryRequest"];
+                "application/*+json": components["schemas"]["EntryRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["EntryPreviewResponse"];
+                    "application/json": components["schemas"]["EntryPreviewResponse"];
+                    "text/json": components["schemas"]["EntryPreviewResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ProblemDetails"];
+                    "application/json": components["schemas"]["ProblemDetails"];
+                    "text/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ProblemDetails"];
+                    "application/json": components["schemas"]["ProblemDetails"];
+                    "text/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ProblemDetails"];
+                    "application/json": components["schemas"]["ProblemDetails"];
+                    "text/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ListTrades: {
+        parameters: {
+            query?: {
+                state?: string;
+                sort?: string;
+                direction?: string;
+                page?: number | string;
+                pageSize?: number | string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["TradePageResponse"];
+                    "application/json": components["schemas"]["TradePageResponse"];
+                    "text/json": components["schemas"]["TradePageResponse"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ErrorResponse"];
+                    "application/json": components["schemas"]["ErrorResponse"];
+                    "text/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    OpenTrade: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EntryRequest"];
+                "text/json": components["schemas"]["EntryRequest"];
+                "application/*+json": components["schemas"]["EntryRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["TradeResponse"];
+                    "application/json": components["schemas"]["TradeResponse"];
+                    "text/json": components["schemas"]["TradeResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ProblemDetails"];
+                    "application/json": components["schemas"]["ProblemDetails"];
+                    "text/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["EntryRefusedResponse"];
+                    "application/json": components["schemas"]["EntryRefusedResponse"];
+                    "text/json": components["schemas"]["EntryRefusedResponse"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ProblemDetails"];
+                    "application/json": components["schemas"]["ProblemDetails"];
+                    "text/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ProblemDetails"];
+                    "application/json": components["schemas"]["ProblemDetails"];
+                    "text/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    GetTrade: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["TradeResponse"];
+                    "application/json": components["schemas"]["TradeResponse"];
+                    "text/json": components["schemas"]["TradeResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ProblemDetails"];
+                    "application/json": components["schemas"]["ProblemDetails"];
+                    "text/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    CloseTrade: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["TradeResponse"];
+                    "application/json": components["schemas"]["TradeResponse"];
+                    "text/json": components["schemas"]["TradeResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ProblemDetails"];
+                    "application/json": components["schemas"]["ProblemDetails"];
+                    "text/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ProblemDetails"];
+                    "application/json": components["schemas"]["ProblemDetails"];
+                    "text/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ResolveTrade: {
+        parameters: {
+            query?: {
+                unchecked?: boolean;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["TradeResponse"];
+                    "application/json": components["schemas"]["TradeResponse"];
+                    "text/json": components["schemas"]["TradeResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ProblemDetails"];
+                    "application/json": components["schemas"]["ProblemDetails"];
+                    "text/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ProblemDetails"];
+                    "application/json": components["schemas"]["ProblemDetails"];
+                    "text/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ProblemDetails"];
+                    "application/json": components["schemas"]["ProblemDetails"];
+                    "text/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ProblemDetails"];
+                    "application/json": components["schemas"]["ProblemDetails"];
+                    "text/json": components["schemas"]["ProblemDetails"];
                 };
             };
         };

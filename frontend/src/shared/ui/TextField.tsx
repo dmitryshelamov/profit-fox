@@ -1,14 +1,19 @@
 import type { InputHTMLAttributes, ReactNode, Ref } from 'react';
 
-/** A text field 32 px high, with a sign on the left when given. `className` sizes the field, the rest goes to the input. */
+/**
+ * A text field 32 px high, with a sign on the left and a unit («USDT», «%») on the right when given. `className` sizes the
+ * field, the rest goes to the input.
+ */
 export function TextField({
   sign,
+  unit,
   mono = false,
   className = '',
   ref,
   ...input
 }: InputHTMLAttributes<HTMLInputElement> & {
   readonly sign?: ReactNode;
+  readonly unit?: ReactNode;
   readonly mono?: boolean;
   readonly ref?: Ref<HTMLInputElement>;
 }) {
@@ -26,6 +31,11 @@ export function TextField({
         className={`h-full min-w-0 flex-1 bg-transparent text-[13px] text-text outline-none placeholder:text-faint read-only:text-muted ${mono ? 'font-mono' : ''}`}
         {...input}
       />
+      {unit !== undefined && (
+        <span aria-hidden="true" className="text-xs text-faint">
+          {unit}
+        </span>
+      )}
     </span>
   );
 }

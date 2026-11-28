@@ -8,6 +8,7 @@ import {
   signedAmount,
   signTone,
 } from '@/pages/market/format';
+import { TradeCell } from '@/pages/trades/TradeCell';
 import { zoneLabel } from '@/shared/time';
 import { Badge } from '@/shared/ui/Badge';
 import type { PagedColumn } from '@/shared/ui/PagedTable';
@@ -141,6 +142,15 @@ export function resultOf(idea: Idea) {
   return <span className={signTone(value)}>{changeText(value)}</span>;
 }
 
+/** The state of the trade of the idea or «Войти» (change take-idea-trades, spec idea-trades «Кнопка „Войти“ у идеи»). */
+const trade: PagedColumn<Idea> = {
+  key: 'trade',
+  title: 'Сделка',
+  unsorted: true,
+  className: 'pl-6',
+  cell: (idea) => <TradeCell idea={idea} />,
+};
+
 /** The columns of the open ideas (spec strategy-ideas «Раздел «Идеи»»). */
 export const openColumns: readonly PagedColumn<Idea>[] = [
   symbol,
@@ -165,6 +175,7 @@ export const openColumns: readonly PagedColumn<Idea>[] = [
     cell: (idea) => <span className="font-sans">{leftOf(idea)}</span>,
   },
   { key: 'now', title: 'Сейчас', numeric: true, cell: resultOf },
+  trade,
 ];
 
 /** The columns of the closed ideas of the journal. */
@@ -242,6 +253,7 @@ export const pairColumns: readonly PagedColumn<Idea>[] = [
     ),
   },
   { key: 'result', title: 'Итог', numeric: true, cell: resultOf },
+  trade,
 ];
 
 /** The columns of the summary of the journal. */

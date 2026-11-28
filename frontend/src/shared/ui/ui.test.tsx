@@ -10,6 +10,7 @@ import { PagedTable } from './PagedTable';
 import { RunStatusBadge } from './RunStatusBadge';
 import { Segmented } from './Segmented';
 import { Tabs } from './Tabs';
+import { TextField } from './TextField';
 
 describe('Menu', () => {
   function rowMenu(onSelect = vi.fn()) {
@@ -349,5 +350,14 @@ describe('the width of a paged table', () => {
     expect(screen.getByRole('table', { name: 'Строки' }).parentElement).not.toHaveClass(
       '[&_td]:pl-3.5',
     );
+  });
+});
+
+describe('TextField', () => {
+  it('shows its unit after the value without taking part in the name of the field', () => {
+    render(<TextField aria-label="Сумма" unit="USDT" defaultValue="100" />);
+
+    expect(screen.getByRole('textbox', { name: 'Сумма' })).toHaveValue('100');
+    expect(screen.getByText('USDT')).toBeInTheDocument();
   });
 });
