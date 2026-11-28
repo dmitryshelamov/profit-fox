@@ -36,6 +36,15 @@ public sealed class FakeBybit : IExchangeMarket, IExchangeTrading, IExchangeStre
     public TimeProvider Time { get; set; } = TimeProvider.System;
 
     /// <summary>
+    ///     The moment of an event of the exchange: whole milliseconds, as Bybit gives them.
+    /// </summary>
+    private DateTimeOffset Moment()
+    {
+        DateTimeOffset now = Time.GetUtcNow();
+        return now.AddTicks(-(now.Ticks % TimeSpan.TicksPerMillisecond));
+    }
+
+    /// <summary>
     ///     How long opening a stream takes; a stream of a key whose <see cref="Account.StreamRefusal" /> is set does not open.
     /// </summary>
     public TimeSpan OpenDelay { get; set; } = TimeSpan.Zero;
@@ -226,7 +235,7 @@ public sealed class FakeBybit : IExchangeMarket, IExchangeTrading, IExchangeStre
         {
             Account account = Key(apiKey);
             Position position = account.Positions[symbol];
-            var fill = new ExchangeFill(NextId(), symbol, null, position.Side, _pairs[symbol].Price, position.Size, paid, ExchangeFillType.Funding, ExchangeStopType.None, Time.GetUtcNow());
+            var fill = new ExchangeFill(NextId(), symbol, null, position.Side, _pairs[symbol].Price, position.Size, paid, ExchangeFillType.Funding, ExchangeStopType.None, Moment());
             account.Fills.Add(fill);
             account.Send(fill);
         }
@@ -620,13 +629,13 @@ public sealed class FakeBybit : IExchangeMarket, IExchangeTrading, IExchangeStre
             position.Size -= closed;
             if (position.Size == 0)
             {
-                account.Closed.Add((symbol, new ExchangeClosedResult(result, price, closed, Time.GetUtcNow())));
+                account.Closed.Add((symbol, new ExchangeClosedResult(result, price, closed, Moment())));
                 position.Stop = null;
                 position.Target = null;
             }
         }
 
-        var fill = new ExchangeFill(NextId(), symbol, linkId, side, price, quantity, paid, type, stopType, Time.GetUtcNow());
+        var fill = new ExchangeFill(NextId(), symbol, linkId, side, price, quantity, paid, type, stopType, Moment());
         account.Fills.Add(fill);
         account.Send(fill);
         if (account.FillTwice)

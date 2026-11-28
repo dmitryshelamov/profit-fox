@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Time.Testing;
+
 using ProfitFox.Application.Ports.Exchange;
 using ProfitFox.Domain.ValueObjects.Trades;
 using ProfitFox.Domain.ValueObjects.Trades.Enums;
@@ -24,6 +26,19 @@ public sealed class FakeBybitTests
         _bybit = new FakeBybit().Pair("SOLUSDT", 237.40m);
         _messages.Clear();
         _states.Clear();
+    }
+
+    // Bybit gives its moments in whole milliseconds, and so does the fake: a moment of 100 ns would differ from the one the
+    // database keeps to the microsecond, and a test on a clock of Linux would compare the two.
+    [Test]
+    public async Task The_moments_of_the_fake_are_whole_milliseconds_as_those_of_Bybit()
+    {
+        var start = new DateTimeOffset(2026, 11, 28, 10, 15, 0, TimeSpan.Zero);
+        _bybit.Time = new FakeTimeProvider(start.AddTicks(1_234_567));
+
+        await Enter(stop: 231.38m, target: 245.54m);
+
+        Assert.That(_bybit.FillsOf(Key)[^1].Time, Is.EqualTo(start.AddMilliseconds(123)));
     }
 
     [Test]
