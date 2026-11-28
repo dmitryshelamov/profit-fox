@@ -5,6 +5,7 @@ using Npgsql;
 using ProfitFox.Domain.Entities.Accounts;
 using ProfitFox.Domain.Repositories;
 using ProfitFox.Domain.ValueObjects.Accounts;
+using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Trades;
 
 namespace ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Accounts;
 
@@ -18,7 +19,7 @@ internal sealed class ExchangeAccountRepository(NpgsqlDataSource database) : IEx
     private const string NameIndex = "exchange_accounts_name_ux";
     private const string UidIndex = "exchange_accounts_uid_ux";
 
-    private const string Columns = """id AS "Id", name AS "Name", uid AS "Uid", api_key AS "ApiKey", created_at AS "CreatedAt", margin_mode AS "MarginMode" """;
+    private const string Columns = """id AS "Id", name AS "Name", uid AS "Uid", api_key AS "ApiKey", created_at AS "CreatedAt", margin_mode AS "MarginMode", feed AS "Feed", feed_changed_at AS "FeedChangedAt", fills_cursor_at AS "FillsCursorAt" """;
 
     public async Task<IReadOnlyList<ExchangeAccount>> AllAsync(CancellationToken cancellationToken)
     {
@@ -73,10 +74,54 @@ internal sealed class ExchangeAccountRepository(NpgsqlDataSource database) : IEx
         return await connection.ExecuteAsync(new CommandDefinition("UPDATE exchange_accounts SET margin_mode = @MarginMode WHERE id = @Id", new { Id = id, MarginMode = marginMode }, cancellationToken: cancellationToken)) == 1;
     }
 
+    public async Task SetFeedAsync(Guid id, string? feed, DateTimeOffset at, string worker, CancellationToken cancellationToken)
+    {
+        await using NpgsqlConnection connection = await database.OpenConnectionAsync(cancellationToken);
+        await using NpgsqlTransaction transaction = await connection.BeginTransactionAsync(cancellationToken);
+        await TraderFence.CheckAsync(connection, transaction, worker, cancellationToken);
+        await connection.ExecuteAsync(new CommandDefinition(
+            "UPDATE exchange_accounts SET feed = @Feed, feed_changed_at = @At WHERE id = @Id AND feed IS DISTINCT FROM @Feed",
+            new { Id = id, Feed = feed, At = at },
+            transaction,
+            cancellationToken: cancellationToken));
+        await transaction.CommitAsync(cancellationToken);
+    }
+
+    public async Task SetFillsCursorAsync(Guid id, DateTimeOffset at, string worker, CancellationToken cancellationToken)
+    {
+        await using NpgsqlConnection connection = await database.OpenConnectionAsync(cancellationToken);
+        await using NpgsqlTransaction transaction = await connection.BeginTransactionAsync(cancellationToken);
+        await TraderFence.CheckAsync(connection, transaction, worker, cancellationToken);
+        await connection.ExecuteAsync(new CommandDefinition("UPDATE exchange_accounts SET fills_cursor_at = @At WHERE id = @Id", new { Id = id, At = at }, transaction, cancellationToken: cancellationToken));
+        await transaction.CommitAsync(cancellationToken);
+    }
+
     public async Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken)
     {
         await using NpgsqlConnection connection = await database.OpenConnectionAsync(cancellationToken);
         return await connection.ExecuteAsync(new CommandDefinition("DELETE FROM exchange_accounts WHERE id = @Id", new { Id = id }, cancellationToken: cancellationToken)) == 1;
+    }
+
+    public async Task<bool?> DeleteIdleAsync(Guid id, CancellationToken cancellationToken)
+    {
+        await using NpgsqlConnection connection = await database.OpenConnectionAsync(cancellationToken);
+        await using NpgsqlTransaction transaction = await connection.BeginTransactionAsync(cancellationToken);
+        await connection.ExecuteAsync(new CommandDefinition("SELECT pg_advisory_xact_lock(@Key)", new { Key = TraderFence.EntryLock }, transaction, cancellationToken: cancellationToken));
+        int removed = await connection.ExecuteAsync(new CommandDefinition(
+            """
+            DELETE FROM exchange_accounts a
+            WHERE a.id = @Id AND NOT EXISTS (SELECT 1 FROM trades t WHERE t.account_id = a.id AND t.state IN ('pending', 'open', 'closing', 'error'))
+            """,
+            new { Id = id },
+            transaction,
+            cancellationToken: cancellationToken));
+        bool? answer = removed == 1
+            ? true
+            : await connection.ExecuteScalarAsync<bool>(new CommandDefinition("SELECT EXISTS (SELECT 1 FROM exchange_accounts WHERE id = @Id)", new { Id = id }, transaction, cancellationToken: cancellationToken))
+                ? null
+                : false;
+        await transaction.CommitAsync(cancellationToken);
+        return answer;
     }
 
     public async Task<ProtectedSecret?> SecretAsync(Guid id, CancellationToken cancellationToken)
@@ -108,9 +153,15 @@ internal sealed class ExchangeAccountRepository(NpgsqlDataSource database) : IEx
 
         public string? MarginMode { get; init; }
 
+        public string? Feed { get; init; }
+
+        public DateTimeOffset? FeedChangedAt { get; init; }
+
+        public DateTimeOffset? FillsCursorAt { get; init; }
+
         public ExchangeAccount ToDomain()
         {
-            return new ExchangeAccount(Id, Name, Uid, ApiKey, CreatedAt, MarginMode);
+            return new ExchangeAccount(Id, Name, Uid, ApiKey, CreatedAt, MarginMode, Feed, FeedChangedAt, FillsCursorAt);
         }
     }
 

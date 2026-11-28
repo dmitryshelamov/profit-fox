@@ -5,6 +5,7 @@ using ProfitFox.Application.Commands.Backtests.ExecuteBacktest;
 using ProfitFox.Application.Queries.Preview;
 using ProfitFox.Application.Services.Ideas;
 using ProfitFox.Application.Services.Market;
+using ProfitFox.Application.Services.Trades;
 using ProfitFox.Infrastructure.Clients.Bybit;
 using ProfitFox.Infrastructure.Clients.MarketData;
 using ProfitFox.Infrastructure.Mediatr;
@@ -30,7 +31,9 @@ public static class InfrastructureRegistrar
         services.AddSingleton<PreviewHistoryCache>();
         services.AddSingleton(new ScannerSettings());
         services.AddSingleton(new IdeasSettings());
+        services.AddSingleton(new TradingSettings());
         services.AddTransient<IdeaLibrary>();
+        services.AddTransient<EntryContextReader>();
         services.AddSingleton<LiveCandleHub>();
         // The limit of the reads of the page of a pair, one for the process: the journal tells of each step once a minute.
         services.AddSingleton<PageReads>();
@@ -51,7 +54,8 @@ public static class InfrastructureRegistrar
     /// <summary>
     ///     The check of the master key <c>ExchangeAccounts:MasterKey</c> when the host starts (change add-exchange-accounts,
     ///     design.md, decisions 1 and 2): without it, or with a key that is not 32 bytes in base64, the host does not start.
-    ///     Only the API calls it: a Worker starts without the master key and never decrypts a secret.
+    ///     The API calls it, and the trading Worker (change take-idea-trades, design.md, decision 2); the other Workers start
+    ///     without the master key and never decrypt a secret.
     /// </summary>
     public static IServiceCollection RequireMasterKey(this IServiceCollection services)
     {

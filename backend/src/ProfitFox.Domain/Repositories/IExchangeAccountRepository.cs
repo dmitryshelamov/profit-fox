@@ -33,9 +33,29 @@ public interface IExchangeAccountRepository
     Task<bool> SetMarginModeAsync(Guid id, string? marginMode, CancellationToken cancellationToken);
 
     /// <summary>
+    ///     Writes how the trading Worker reads the account — <c>stream</c>, <c>poll</c> or null — and since when, when it changed,
+    ///     under the lease of <paramref name="worker" /> as every write of the trading Worker (change take-idea-trades).
+    /// </summary>
+    /// <exception cref="Exceptions.LeaseLostException">The Worker does not hold the lease; nothing is written.</exception>
+    Task SetFeedAsync(Guid id, string? feed, DateTimeOffset at, string worker, CancellationToken cancellationToken);
+
+    /// <summary>
+    ///     Writes from which moment the fills of the account are read by REST, under the lease of <paramref name="worker" />.
+    /// </summary>
+    /// <exception cref="Exceptions.LeaseLostException">The Worker does not hold the lease; nothing is written.</exception>
+    Task SetFillsCursorAsync(Guid id, DateTimeOffset at, string worker, CancellationToken cancellationToken);
+
+    /// <summary>
     ///     Removes the account with its secret; false when there was none.
     /// </summary>
     Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken);
+
+    /// <summary>
+    ///     Removes the account with its secret unless a trade of it holds its pair (change take-idea-trades; review R3): one
+    ///     transaction under the advisory lock of the entry, so an entry and the removal do not cross. True when removed,
+    ///     false when there was none, null when a trade holds a pair of it — nothing is removed then.
+    /// </summary>
+    Task<bool?> DeleteIdleAsync(Guid id, CancellationToken cancellationToken);
 
     /// <summary>
     ///     The encrypted secret of the account; null when there is no account.

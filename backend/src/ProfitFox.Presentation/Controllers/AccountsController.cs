@@ -54,12 +54,23 @@ public class AccountsController(ISender sender) : ControllerBase
         return await Answer<AccountResponse>(async () => Of(await sender.Send(new RenameAccountCommand(id, request.Name), cancellation)));
     }
 
+    /// <summary>
+    ///     Removes the account; 409 while a trade of it holds its pair (change take-idea-trades).
+    /// </summary>
     [HttpDelete("{id:guid}", Name = "DeleteAccount")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
     public async Task<ActionResult> Delete(Guid id, CancellationToken cancellation)
     {
-        return await sender.Send(new DeleteAccountCommand(id), cancellation) ? NoContent() : Problem($"There is no account {id}.", statusCode: StatusCodes.Status404NotFound);
+        try
+        {
+            return await sender.Send(new DeleteAccountCommand(id), cancellation) ? NoContent() : Problem($"There is no account {id}.", statusCode: StatusCodes.Status404NotFound);
+        }
+        catch (TradeConflictException exception)
+        {
+            return Problem(exception.Message, statusCode: StatusCodes.Status409Conflict);
+        }
     }
 
     /// <summary>
