@@ -1,6 +1,8 @@
 using ProfitFox.Application.Queries.Ideas;
 using ProfitFox.Domain.Entities.Ideas;
 using ProfitFox.Domain.Entities.Ideas.Enums;
+using ProfitFox.Domain.Entities.Trades.Enums;
+using ProfitFox.Domain.Services.Trades;
 using ProfitFox.Domain.ValueObjects.Graph.Enums;
 using ProfitFox.Domain.ValueObjects.Lists;
 using ProfitFox.Domain.ValueObjects.MarketData;
@@ -13,7 +15,7 @@ namespace ProfitFox.Presentation.Contracts.Ideas.Converters;
 /// </summary>
 public static class IdeaResponses
 {
-    public static IdeaResponse Of(Idea idea)
+    public static IdeaResponse Of(Idea idea, IdeaTradeResponse? trade = null)
     {
         return new IdeaResponse(
             idea.Id,
@@ -54,12 +56,18 @@ public static class IdeaResponses
             idea.Result,
             idea.ResultUsdt,
             idea.Excluded,
-            idea.Score);
+            idea.Score,
+            trade);
     }
 
     public static IdeaPageResponse Of(IdeaListResult result)
     {
-        return new IdeaPageResponse([.. result.Page.Items.Select(Of)], result.Page.Total, result.Page.Page, result.Page.PageSize, result.FilterGone);
+        return new IdeaPageResponse(
+            [.. result.Page.Items.Select(idea => Of(idea, result.Trades.TryGetValue(idea.Id, out (Guid TradeId, TradeState State) trade) ? new IdeaTradeResponse(trade.TradeId, TradeNames.Of(trade.State)) : null))],
+            result.Page.Total,
+            result.Page.Page,
+            result.Page.PageSize,
+            result.FilterGone);
     }
 
     public static IdeaSummaryPageResponse Of(IdeaSummaryResult result)

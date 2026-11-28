@@ -31,7 +31,11 @@ public sealed class MigrationTests
 
     private static readonly string[] ScoreTables = ["label_weights"];
 
-    private static readonly string[] Tables = [.. BacktestTables.Concat(IdeaTables).Concat(ScoreTables).Order(StringComparer.Ordinal)];
+    private static readonly string[] AccountTables = ["exchange_accounts"];
+
+    private static readonly string[] TradeTables = ["trade_fills", "trade_halt", "trade_orders", "trade_settings", "trader_lease", "trades"];
+
+    private static readonly string[] Tables = [.. BacktestTables.Concat(IdeaTables).Concat(ScoreTables).Concat(AccountTables).Concat(TradeTables).Order(StringComparer.Ordinal)];
 
     [SetUp]
     public async Task Empty()
@@ -61,7 +65,7 @@ public sealed class MigrationTests
 
         await using var connection = new NpgsqlConnection(connectionString);
         long[] versions = [.. await connection.QueryAsync<long>("SELECT \"Version\" FROM \"VersionInfo\" ORDER BY \"Version\"")];
-        Assert.That(versions, Is.EqualTo(new[] { 202611200001L, 202611210001L, 202611220001L, 202611220002L, 202611230001L, 202611230002L, 202611230003L, 202611230004L, 202611250001L, 202611250002L, 202611270001L, 202611280001L, 202611280002L }));
+        Assert.That(versions, Is.EqualTo(new[] { 202611200001L, 202611210001L, 202611220001L, 202611220002L, 202611230001L, 202611230002L, 202611230003L, 202611230004L, 202611250001L, 202611250002L, 202611270001L, 202611280001L, 202611280002L, 202611280003L, 202611280004L, 202611280005L, 202611280006L, 202611280007L, 202611280008L }));
         Assert.That(await TablesOf(connectionString), Is.SupersetOf(new[] { "strategies", "strategy_versions", "strategy_signals" }));
     }
 
@@ -386,6 +390,130 @@ public sealed class MigrationTests
         PostgresException? oldRange = Assert.ThrowsAsync<PostgresException>(() => connection.ExecuteAsync("UPDATE label_weights SET long_weight = 4 WHERE text = '↓ BTC 4h'"));
         Assert.That(oldRange!.SqlState, Is.EqualTo(PostgresErrorCodes.CheckViolation));
         Assert.That(await connection.ExecuteScalarAsync<long>("SELECT count(*) FROM pg_indexes WHERE tablename = 'ideas' AND indexname = 'ideas_state_score_ix'"), Is.EqualTo(1));
+    }
+
+    /// <summary>
+    ///     Change add-exchange-accounts, task 3.2 (design.md, decision 3, «Migration Plan»): the table of the accounts with the
+    ///     secret only in its encrypted parts and one name without regard to case and one UID; Down removes the table with the
+    ///     secrets and nothing else.
+    /// </summary>
+    [Test]
+    public async Task The_accounts_table_keeps_the_secret_encrypted_and_down_removes_it()
+    {
+        string connectionString = await BenchDatabase.NewDatabase();
+        await using var connection = new NpgsqlConnection(connectionString);
+        await using ServiceProvider services = BenchDatabase.Migrated(connectionString);
+        using IServiceScope scope = services.CreateScope();
+        IMigrationRunner runner = scope.ServiceProvider.GetRequiredService<IMigrationRunner>();
+
+        Assert.That(
+            await ColumnsOf(connection, ["exchange_accounts"]),
+            Is.EqualTo(new[]
+            {
+                "exchange_accounts.id:uuid:NO", "exchange_accounts.name:text:NO", "exchange_accounts.api_key:text:NO",
+                "exchange_accounts.secret_nonce:bytea:NO", "exchange_accounts.secret_ciphertext:bytea:NO", "exchange_accounts.secret_tag:bytea:NO",
+                "exchange_accounts.uid:bigint:NO", "exchange_accounts.created_at:timestamp with time zone:NO",
+                "exchange_accounts.margin_mode:text:YES", "exchange_accounts.fills_cursor_at:timestamp with time zone:YES",
+                "exchange_accounts.feed:text:YES", "exchange_accounts.feed_changed_at:timestamp with time zone:YES"
+            }));
+        Assert.That(
+            await connection.QueryAsync<string>("SELECT indexdef FROM pg_indexes WHERE tablename = 'exchange_accounts' AND indexname LIKE '%_ux' ORDER BY indexname"),
+            Is.EqualTo(new[]
+            {
+                "CREATE UNIQUE INDEX exchange_accounts_name_ux ON public.exchange_accounts USING btree (lower(name))",
+                "CREATE UNIQUE INDEX exchange_accounts_uid_ux ON public.exchange_accounts USING btree (uid)"
+            }));
+
+        runner.MigrateDown(202611280002);
+
+        Assert.That(await TablesOf(connectionString), Is.EqualTo(Tables.Except(AccountTables).Except(TradeTables).ToArray()));
+    }
+
+    /// <summary>
+    ///     Change add-exchange-accounts, task 3.3 (design.md, decision 11): the margin mode of an account is a column that may be
+    ///     empty, an account of before keeps none; Down removes only the column and keeps the accounts.
+    /// </summary>
+    [Test]
+    public async Task The_margin_mode_is_a_column_that_may_be_empty_and_down_removes_only_it()
+    {
+        string connectionString = await BenchDatabase.NewDatabase();
+        await using var connection = new NpgsqlConnection(connectionString);
+        var registrations = new ServiceCollection();
+        PostgresRegistrar.Configure(BenchDatabase.Settings(connectionString), registrations);
+        await using ServiceProvider services = registrations.BuildServiceProvider();
+        using IServiceScope scope = services.CreateScope();
+        IMigrationRunner runner = scope.ServiceProvider.GetRequiredService<IMigrationRunner>();
+        runner.MigrateUp(202611280003);
+        await connection.ExecuteAsync("INSERT INTO exchange_accounts VALUES (gen_random_uuid(), 'Основной', 'key', '\\x00', '\\x00', '\\x00', 104857321, now())");
+
+        runner.MigrateUp(202611280004);
+
+        Assert.That(await ColumnsOf(connection, ["exchange_accounts"]), Does.Contain("exchange_accounts.margin_mode:text:YES"));
+        Assert.That(await connection.ExecuteScalarAsync<string?>("SELECT margin_mode FROM exchange_accounts"), Is.Null);
+
+        runner.MigrateDown(202611280003);
+
+        Assert.That(await ColumnsOf(connection, ["exchange_accounts"]), Has.None.StartsWith("exchange_accounts.margin_mode:"));
+        Assert.That(await connection.ExecuteScalarAsync<long>("SELECT count(*) FROM exchange_accounts"), Is.EqualTo(1));
+    }
+
+    /// <summary>
+    ///     Change take-idea-trades, task 4.1 (design.md, decisions 1, 3 and 12): the tables of the trades come, the database
+    ///     refuses a second trade that holds the same pair on the same account — another account, another pair or a closed
+    ///     trade does not stop it —, and Down of each migration gives back the schema before it.
+    /// </summary>
+    [Test]
+    public async Task The_trade_tables_refuse_a_second_holding_trade_of_a_pair_and_each_down_gives_the_schema_back()
+    {
+        string connectionString = await BenchDatabase.NewDatabase();
+        await using var connection = new NpgsqlConnection(connectionString);
+        var registrations = new ServiceCollection();
+        PostgresRegistrar.Configure(BenchDatabase.Settings(connectionString), registrations);
+        await using ServiceProvider services = registrations.BuildServiceProvider();
+        using IServiceScope scope = services.CreateScope();
+        IMigrationRunner runner = scope.ServiceProvider.GetRequiredService<IMigrationRunner>();
+        runner.MigrateUp(202611280004);
+        string[] tables = await TablesOf(connectionString);
+        string[] accounts = await ColumnsOf(connection, ["exchange_accounts"]);
+        runner.MigrateUp(202611280008);
+        string[] all = await TablesOf(connectionString);
+        Assert.That(all, Is.EqualTo(Tables));
+
+        await connection.ExecuteAsync("INSERT INTO exchange_accounts (id, name, api_key, secret_nonce, secret_ciphertext, secret_tag, uid, created_at) VALUES ('00000000-0000-0000-0000-00000000000a', 'Основной', 'k1', '\\x00', '\\x00', '\\x00', 1, now()), ('00000000-0000-0000-0000-00000000000b', 'Суб', 'k2', '\\x00', '\\x00', '\\x00', 2, now())");
+        await AddTrade(connection, "00000000-0000-0000-0000-00000000000a", "BTCUSDT", "open");
+        await AddTrade(connection, "00000000-0000-0000-0000-00000000000b", "BTCUSDT", "pending");
+        await AddTrade(connection, "00000000-0000-0000-0000-00000000000a", "ETHUSDT", "error");
+        await AddTrade(connection, "00000000-0000-0000-0000-00000000000a", "ETHUSDT", "closed");
+        foreach (string state in new[] { "pending", "open", "closing", "error" })
+        {
+            Assert.That(
+                () => AddTrade(connection, "00000000-0000-0000-0000-00000000000a", "BTCUSDT", state),
+                Throws.InstanceOf<PostgresException>().With.Property(nameof(PostgresException.SqlState)).EqualTo("23505"),
+                state);
+        }
+
+        await connection.ExecuteAsync("DELETE FROM trades");
+
+        runner.MigrateDown(202611280007);
+        Assert.That(await ColumnsOf(connection, ["exchange_accounts"]), Is.EqualTo(accounts));
+        runner.MigrateDown(202611280006);
+        Assert.That(await TablesOf(connectionString), Is.EqualTo(all.Except(["trade_halt", "trader_lease"]).ToArray()));
+        runner.MigrateDown(202611280005);
+        Assert.That(await TablesOf(connectionString), Is.EqualTo(all.Except(["trade_halt", "trader_lease", "trades", "trade_orders", "trade_fills"]).ToArray()));
+        runner.MigrateDown(202611280004);
+        Assert.That(await TablesOf(connectionString), Is.EqualTo(tables));
+    }
+
+    private static Task<int> AddTrade(NpgsqlConnection connection, string account, string symbol, string state)
+    {
+        return connection.ExecuteAsync(
+            """
+            INSERT INTO trades (id, idea_id, symbol, side, strategy_id, strategy_name, strategy_version, timeframe, idea_moment, until, idea_entry,
+                                account_id, account_name, amount, leverage, click_price, quantity, stop, stop_source, state, entry_wait_seconds, stop_attempts, created_at)
+            VALUES (gen_random_uuid(), gen_random_uuid(), @Symbol, 'long', gen_random_uuid(), 's', 1, '1h', now(), now(), 1,
+                    @Account::uuid, 'a', 100, 1, 1, 1, 0.9, 'limit', @State, 30, 3, now())
+            """,
+            new { Account = account, Symbol = symbol, State = state });
     }
 
     private static async Task<string[]> ColumnsOf(NpgsqlConnection connection, string[] tables)

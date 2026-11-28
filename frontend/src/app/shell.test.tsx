@@ -6,6 +6,7 @@ import { fakeApi, json } from '@/test/fakeApi';
 import { renderApp } from '@/test/renderApp';
 import { baseRoutes } from '@/test/routes';
 import { backtest } from '@/test/runs';
+import { riskSettings, riskState } from '@/test/trades';
 
 const going = backtest({
   id: 'r1',
@@ -27,8 +28,8 @@ const activeRequests = (requests: readonly Request[]) =>
 describe('the header', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  // Scenario «Текущий раздел».
-  it('has the six sections and marks «Прогоны» as current on the page of a run', async () => {
+  // Scenario «Текущий раздел»: nine sections since change take-idea-trades.
+  it('has the nine sections and marks «Прогоны» as current on the page of a run', async () => {
     fakeApi({
       'GET /api/backtests': () => json([]),
       'GET /api/backtests/r5': () => json({ ...going, id: 'r5' }),
@@ -41,8 +42,11 @@ describe('the header', () => {
       'Стратегии',
       'Прогоны',
       'Идеи',
+      'Сделки',
+      'Риск',
       'Рынок',
       'Скоринг',
+      'Аккаунты',
     ]);
     await waitFor(() =>
       expect(
@@ -64,9 +68,19 @@ describe('the header', () => {
     ['/market/SOLUSDT', 'Рынок'],
     // Change add-idea-score, scenario «Страница «Скоринг»».
     ['/scoring', 'Скоринг'],
+    // Change add-exchange-accounts, scenario «Страница «Аккаунты»».
+    ['/accounts', 'Аккаунты'],
+    // Change take-idea-trades, scenarios «Страница «Сделки»» and «Страница «Риск»».
+    ['/trades', 'Сделки'],
+    ['/risk', 'Риск'],
   ])('marks the section of %s as current', async (path, section) => {
     fakeApi({
       ...baseRoutes(),
+      'GET /api/accounts': () => json([]),
+      'GET /api/trades': () =>
+        json({ items: [], total: 0, page: 1, pageSize: 50, open: 0, closed: 0 }),
+      'GET /api/risk/state': () => json(riskState()),
+      'GET /api/risk/settings': () => json(riskSettings()),
       'GET /api/strategies': () => json([]),
       'GET /api/backtests': () => json([]),
       'GET /api/scoring/labels': () => json([]),

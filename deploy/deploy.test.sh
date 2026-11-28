@@ -80,6 +80,59 @@ role_is "workers; id" "<refused>"
 role_is "" "<refused>"
 rm -f "$role_file"
 
+# The secrets of a role (change add-exchange-accounts, task 7.1): the main machine needs the master key of the API as well, and a
+# missing secret is named without any value of the file.
+env_file="$(mktemp)"
+secrets_are() {
+  local content="$1" role="$2" expected="$3" actual error
+  printf '%s' "$content" >"$env_file"
+  # shellcheck disable=SC2046 # the names are words without spaces
+  if error="$(require_secrets "$env_file" $(secrets_of "$role") 2>&1)"; then actual="<ok>"; else actual="$error"; fi
+  if [[ "$actual" == "<ok>" && "$expected" == "<ok>" ]] || [[ "$expected" != "<ok>" && "$actual" == *"has no $expected:"* ]]; then
+    echo "ok: $role with '${content//$'\n'/ | }' gives $expected"
+  else
+    echo "FAIL: $role with '${content//$'\n'/ | }' should give $expected, got '$actual'"
+    failures=$((failures + 1))
+  fi
+  if [[ "$actual" == *"s3cr3t"* ]]; then
+    echo "FAIL: the refusal shows a value of the env file"
+    failures=$((failures + 1))
+  fi
+}
+secrets_are "PROFIT_FOX_DB_PASSWORD=ab12"$'\n'"PROFIT_FOX_MASTER_KEY=s3cr3t=="$'\n' main "<ok>"
+secrets_are "PROFIT_FOX_DB_PASSWORD=s3cr3t"$'\n' main PROFIT_FOX_MASTER_KEY
+secrets_are "PROFIT_FOX_DB_PASSWORD=s3cr3t"$'\n'"PROFIT_FOX_MASTER_KEY="$'\n' main PROFIT_FOX_MASTER_KEY
+secrets_are "# PROFIT_FOX_MASTER_KEY=s3cr3t"$'\n'"PROFIT_FOX_DB_PASSWORD=ab12"$'\n' main PROFIT_FOX_MASTER_KEY
+secrets_are "" main "PROFIT_FOX_DB_PASSWORD PROFIT_FOX_MASTER_KEY"
+secrets_are "PROFIT_FOX_DB_PASSWORD=ab12"$'\n' workers "<ok>"
+secrets_are "PROFIT_FOX_MASTER_KEY=s3cr3t"$'\n' workers PROFIT_FOX_DB_PASSWORD
+rm -f "$env_file"
+
+# Compose itself refuses the file of the main machine without the master key, naming it, and takes it with the key. Needs
+# docker compose, which the runner of CI has.
+compose_file="$(dirname "${BASH_SOURCE[0]}")/../docker-compose.prod.yml"
+if docker compose version >/dev/null 2>&1; then
+  if error="$(env -u PROFIT_FOX_MASTER_KEY PROFIT_FOX_VERSION=1 PROFIT_FOX_DB_PASSWORD=ab12 \
+    docker compose --file "$compose_file" config --quiet 2>&1)"; then
+    echo "FAIL: docker-compose.prod.yml should be refused without PROFIT_FOX_MASTER_KEY"
+    failures=$((failures + 1))
+  elif [[ "$error" == *PROFIT_FOX_MASTER_KEY* ]]; then
+    echo "ok: docker-compose.prod.yml is refused without PROFIT_FOX_MASTER_KEY, naming it"
+  else
+    echo "FAIL: the refusal of docker-compose.prod.yml should name PROFIT_FOX_MASTER_KEY, got '$error'"
+    failures=$((failures + 1))
+  fi
+  if PROFIT_FOX_VERSION=1 PROFIT_FOX_DB_PASSWORD=ab12 PROFIT_FOX_MASTER_KEY=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8= \
+    docker compose --file "$compose_file" config --quiet; then
+    echo "ok: docker-compose.prod.yml is taken with PROFIT_FOX_MASTER_KEY"
+  else
+    echo "FAIL: docker-compose.prod.yml should be taken with PROFIT_FOX_MASTER_KEY"
+    failures=$((failures + 1))
+  fi
+else
+  echo "skip: no docker compose, docker-compose.prod.yml is not checked"
+fi
+
 # Another protocol means deploy.sh on the server and deploy.yml come from different commits: the error says what to do.
 error="$(parse_command "deploy 7 $((protocol + 1))" 2>&1 >/dev/null)"
 if [[ "$error" == *"copy deploy/deploy.sh"* ]]; then
@@ -89,11 +142,10 @@ else
   failures=$((failures + 1))
 fi
 
-# The commit is in the branch when the branch is the commit itself or comes after it. GitHub answers for the branch as the base;
-# the slash of its name is escaped.
+# The commit is in the branch when the branch is the commit itself or comes after it. GitHub answers for the branch as the base.
 compare_status=""
 github() {
-  [[ "$1" == "compare/release%2F0.1.0...$commit" ]] && echo "{\"status\": \"$compare_status\"}"
+  [[ "$1" == "compare/main...$commit" ]] && echo "{\"status\": \"$compare_status\"}"
 }
 commit=0123456789abcdef0123456789abcdef01234567
 

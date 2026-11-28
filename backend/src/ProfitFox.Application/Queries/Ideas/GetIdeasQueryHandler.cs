@@ -10,16 +10,17 @@ namespace ProfitFox.Application.Queries.Ideas;
 
 /// <summary>
 ///     The lists of ideas: sorted by the moment from the newest by default, the journal by the exit; the saved filter is one
-///     of «Идеи».
+///     of «Идеи». A page names the trade of each idea that has one (change take-idea-trades).
 /// </summary>
-internal sealed class GetIdeasQueryHandler(IIdeaRepository ideas, ISavedFilterRepository filters)
+internal sealed class GetIdeasQueryHandler(IIdeaRepository ideas, ISavedFilterRepository filters, ITradeRepository trades)
     : IRequestHandler<GetIdeasQuery, IdeaListResult>, IRequestHandler<GetIdeaSummaryQuery, IdeaSummaryResult>, IRequestHandler<GetIdeaScoresQuery, IdeaScoresResult>
 {
     public async Task<IdeaListResult> Handle(GetIdeasQuery request, CancellationToken cancellationToken)
     {
         ListOrder order = FilterResolver.Order(ListFields.Ideas, request.Kind == IdeaListKind.Closed ? "exitTime" : "moment", request.List);
         (IReadOnlyList<FilterCondition> conditions, bool gone) = await FilterResolver.ConditionsAsync(filters, request.List.Filter, FilterPlace.Ideas, cancellationToken);
-        return new IdeaListResult(await ideas.ListAsync(Query(request, order, conditions), cancellationToken), gone);
+        ListPage<Domain.Entities.Ideas.Idea> page = await ideas.ListAsync(Query(request, order, conditions), cancellationToken);
+        return new IdeaListResult(page, gone) { Trades = await trades.ByIdeasAsync([.. page.Items.Select(idea => idea.Id)], cancellationToken) };
     }
 
     public async Task<IdeaSummaryResult> Handle(GetIdeaSummaryQuery request, CancellationToken cancellationToken)

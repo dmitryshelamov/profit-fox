@@ -1,17 +1,17 @@
 name: Deploy
 
-# The pipeline of the profit-fox bench for its two images (the API with the page, and the Worker): a commit of release/0.1.0
+# The pipeline of the profit-fox bench for its two images (the API with the page, and the Worker): a commit of main
 # whose CI passed gets the next version number N (tag vN), the images are built on a GitHub-hosted runner and pushed to GHCR
 # as :N, and the runner on soyo-03 deploys them to firebat-01 and firebat-02 once the owner approves the production
 # environment. Nothing is built in Russia: from there some nuget.org addresses fail at TLS.
 # Run by hand with a version number to deploy that version again or roll back to it; that run builds nothing.
-# Never runs for pull requests: workflow_run runs this file from the default branch, and only for a push to release/0.1.0 of
+# Never runs for pull requests: workflow_run runs this file from the default branch, and only for a push to main of
 # this repository.
 on:
   workflow_run:
     workflows: [CI]
     types: [completed]
-    branches: [release/0.1.0]
+    branches: [main]
   workflow_dispatch:
     inputs:
       version:
@@ -33,7 +33,7 @@ jobs:
       github.event_name == 'workflow_run' &&
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push' &&
-      github.event.workflow_run.head_branch == 'release/0.1.0' &&
+      github.event.workflow_run.head_branch == 'main' &&
       github.event.workflow_run.head_repository.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -99,7 +99,7 @@ jobs:
     needs: build
     if: >-
       !cancelled() && (needs.build.result == 'success' ||
-      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/release/0.1.0'))
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'))
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -124,7 +124,7 @@ jobs:
           done
           echo "version=$VERSION" >>"$GITHUB_OUTPUT"
 
-  # One deploy at a time. The production environment waits for the owner's approval and admits only release/0.1.0.
+  # One deploy at a time. The production environment waits for the owner's approval and admits only main.
   deploy:
     needs: image
     if: ${{ !cancelled() && needs.image.result == 'success' }}

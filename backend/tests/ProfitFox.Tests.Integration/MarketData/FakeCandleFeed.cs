@@ -92,7 +92,7 @@ public sealed class FakeCandleFeed(FakeMarketData data) : CandleFeed.CandleFeedB
         return new CandleUpdate
         {
             InstrumentId = instrument,
-            Exchange = Exchange.Bybit,
+            Exchange = ProfitFox.Infrastructure.Clients.MarketData.Protos.Exchange.Bybit,
             OpenTime = Timestamp.FromDateTimeOffset(open),
             Open = "100.5",
             High = "101",
