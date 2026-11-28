@@ -36,7 +36,7 @@ public sealed class AddAccountCommandHandlerTests
 
         Assert.That(account, Is.EqualTo(new ExchangeAccount(account.Id, "Основной", FakeKeyInspector.DefaultUid, "key-1", Now)));
         Assert.That(await _accounts.AllAsync(CancellationToken.None), Is.EqualTo(new[] { account }));
-        Assert.That(_bybit.Calls, Is.EqualTo(new[] { ("inspect", "key-1", "s3cr3t-value") }));
+        Assert.That(_bybit.Calls, Is.EqualTo(new[] { ("inspect", "key-1", "s3cr3t-value"), ("mode", "key-1", "s3cr3t-value") }));
         Assert.That(_protector.Reveal(account.Id, _accounts.Kept(account.Id)), Is.EqualTo("s3cr3t-value"));
     }
 
@@ -122,6 +122,41 @@ public sealed class AddAccountCommandHandlerTests
 
         Assert.That(account.CreatedAt, Is.EqualTo(Now.AddTicks(1_234_560)));
         Assert.That((await _accounts.AllAsync(CancellationToken.None)).Single().CreatedAt, Is.EqualTo(account.CreatedAt));
+    }
+
+    // Change add-exchange-accounts, task 5.5: spec «Режим запомнен при добавлении».
+    [Test]
+    public async Task The_margin_mode_Bybit_names_is_kept_with_the_account()
+    {
+        _bybit.Mode("key-1", "ISOLATED_MARGIN");
+
+        ExchangeAccount account = await Handle(new AddAccountCommand("Основной", "key-1", "secret"));
+
+        Assert.That(account.MarginMode, Is.EqualTo("ISOLATED_MARGIN"));
+        Assert.That((await _accounts.FindAsync(account.Id, CancellationToken.None))!.MarginMode, Is.EqualTo("ISOLATED_MARGIN"));
+    }
+
+    // Spec «Отказ при чтении режима»: the key passed, the margin mode was refused — nothing is saved.
+    [TestCase("unavailable")]
+    [TestCase("rejected")]
+    public void An_account_is_not_saved_when_Bybit_refuses_the_margin_mode(string refusal)
+    {
+        _bybit.Mode("key-1", refusal == "rejected" ? new ExchangeKeyRejectedException("Permission denied.") : new ExchangeUnavailableException("Bybit is unavailable"));
+
+        Assert.CatchAsync<ExchangeException>(() => Handle(new AddAccountCommand("Основной", "key-1", "secret")));
+
+        Assert.That(_accounts.Writes, Is.Zero);
+    }
+
+    // The rules of the key come before the margin mode: a refused key does not ask it.
+    [Test]
+    public void A_key_the_rules_refuse_does_not_ask_the_margin_mode()
+    {
+        _bybit.Key("key-1", FakeKeyInspector.Trading() with { ReadOnly = true });
+
+        Assert.ThrowsAsync<AccountRequestException>(() => Handle(new AddAccountCommand("Основной", "key-1", "secret")));
+
+        Assert.That(_bybit.Calls.Select(call => call.Call), Is.EqualTo(new[] { "inspect" }));
     }
 
     private Task<ExchangeAccount> Handle(AddAccountCommand command, DateTimeOffset? now = null)

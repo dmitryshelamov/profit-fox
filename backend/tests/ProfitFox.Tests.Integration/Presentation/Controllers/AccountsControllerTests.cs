@@ -80,7 +80,7 @@ public sealed class AccountsControllerTests
 
         Assert.That(await Errors(empty), Is.EqualTo(new[] { ("Required", "secret") }));
         Assert.That(await Errors(taken), Is.EqualTo(new[] { ("TakenName", "name") }));
-        Assert.That(_bybit.Calls.Select(call => call.ApiKey), Is.EqualTo(new[] { "key-main", "key-2" }), "the empty secret did not reach Bybit");
+        Assert.That(_bybit.Calls.Where(call => call.Call == "inspect").Select(call => call.ApiKey), Is.EqualTo(new[] { "key-main", "key-2" }), "the empty secret did not reach Bybit");
     }
 
     // Spec «Bybit не знает ключ», «Ключ с правом вывода», «Bybit недоступен»; design.md, decision 6.
@@ -148,13 +148,48 @@ public sealed class AccountsControllerTests
         HttpResponseMessage missing = await _api.Http.GetAsync($"/api/accounts/{Guid.NewGuid()}/balance");
 
         Assert.That(shown.StatusCode, Is.EqualTo(HttpStatusCode.OK));
-        Assert.That(await shown.Content.ReadFromJsonAsync<AccountBalanceResponse>(Json), Is.EqualTo(new AccountBalanceResponse(1250.40m)));
+        Assert.That(await shown.Content.ReadFromJsonAsync<AccountBalanceResponse>(Json), Is.EqualTo(new AccountBalanceResponse(1250.40m, null)));
         Assert.That(_bybit.Calls.Where(call => call.Call == "free").Select(call => call.Secret).Distinct(), Is.EqualTo(new[] { Secret }));
         Assert.That((await expired.Content.ReadFromJsonAsync<ErrorResponse>(Json))!.Errors.Single(), Is.EqualTo(new RequestError("KeyRejected", "Your api key has expired.") { Field = "apiKey" }));
         Assert.That(down.StatusCode, Is.EqualTo(HttpStatusCode.ServiceUnavailable));
         Assert.That(other.StatusCode, Is.EqualTo(HttpStatusCode.BadGateway));
         Assert.That(missing.StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
         Assert.That((await _api.Http.GetFromJsonAsync<AccountResponse[]>("/api/accounts", Json))!, Has.Length.EqualTo(1), "the account stays");
+    }
+
+    // Change add-exchange-accounts, task 5.5: spec «Режим запомнен при добавлении», «Режим обновлён по „Показать“», «Список не
+    // ходит к Bybit», «Отказ при чтении режима».
+    [Test]
+    public async Task The_margin_mode_is_kept_at_the_addition_renewed_by_the_balance_and_listed_without_Bybit()
+    {
+        _bybit.Mode("key-main", "ISOLATED_MARGIN");
+        AccountResponse added = (await (await Add("Основной", "key-main")).Content.ReadFromJsonAsync<AccountResponse>(Json))!;
+        _bybit.Free("key-main", 10m).Mode("key-main", "REGULAR_MARGIN");
+        int before = _bybit.Calls.Count;
+        AccountResponse[] listed = (await _api.Http.GetFromJsonAsync<AccountResponse[]>("/api/accounts", Json))!;
+        int listCalls = _bybit.Calls.Count - before;
+
+        AccountBalanceResponse balance = (await _api.Http.GetFromJsonAsync<AccountBalanceResponse>($"/api/accounts/{added.Id}/balance", Json))!;
+        AccountResponse[] after = (await _api.Http.GetFromJsonAsync<AccountResponse[]>("/api/accounts", Json))!;
+
+        Assert.That(added.MarginMode, Is.EqualTo("ISOLATED_MARGIN"));
+        Assert.That(listed.Single().MarginMode, Is.EqualTo("ISOLATED_MARGIN"));
+        Assert.That(listCalls, Is.Zero, "the list does not call Bybit");
+        Assert.That(balance, Is.EqualTo(new AccountBalanceResponse(10m, "REGULAR_MARGIN")));
+        Assert.That(after.Single(), Is.EqualTo(added with { MarginMode = "REGULAR_MARGIN" }));
+    }
+
+    [Test]
+    public async Task A_refused_margin_mode_answers_by_the_table_and_saves_nothing()
+    {
+        _bybit.Mode("down", new ExchangeUnavailableException("Bybit is unavailable")).Mode("denied", new ExchangeKeyRejectedException("Permission denied."));
+
+        HttpResponseMessage down = await Add("A", "down");
+        HttpResponseMessage denied = await Add("B", "denied");
+
+        Assert.That(down.StatusCode, Is.EqualTo(HttpStatusCode.ServiceUnavailable));
+        Assert.That(await Errors(denied), Is.EqualTo(new[] { ("KeyRejected", (string?)"apiKey") }));
+        Assert.That((await _api.Http.GetFromJsonAsync<AccountResponse[]>("/api/accounts", Json))!, Is.Empty);
     }
 
     // Spec «Сменили мастер-ключ»: the API started again with another master key over the same database answers 409.
@@ -189,7 +224,7 @@ public sealed class AccountsControllerTests
         JsonNode document = JsonNode.Parse(await http.GetStringAsync("/openapi/v1.json"))!;
 
         JsonObject schemas = document["components"]!["schemas"]!.AsObject();
-        Assert.That(Properties(schemas["AccountResponse"]!), Is.EqualTo(new[] { "id", "name", "uid", "apiKey", "createdAt" }));
+        Assert.That(Properties(schemas["AccountResponse"]!), Is.EqualTo(new[] { "id", "name", "uid", "apiKey", "marginMode", "createdAt" }));
         Assert.That(Properties(schemas["AddAccountRequest"]!), Is.EqualTo(new[] { "name", "apiKey", "secret" }));
         string[] withSecret = [.. schemas.Where(schema => Properties(schema.Value!).Any(name => name.Contains("secret", StringComparison.OrdinalIgnoreCase))).Select(schema => schema.Key)];
         Assert.That(withSecret, Is.EqualTo(new[] { "AddAccountRequest" }));

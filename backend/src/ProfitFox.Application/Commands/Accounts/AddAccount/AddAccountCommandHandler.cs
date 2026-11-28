@@ -12,7 +12,7 @@ namespace ProfitFox.Application.Commands.Accounts.AddAccount;
 
 /// <summary>
 ///     The order of design.md, decision 5: the rules of the fields, without the network; the permissions of the key at Bybit;
-///     the rules of the key; the encryption of the secret; the write. A taken name or UID is found by the unique index at the
+///     the rules of the key; the margin mode at Bybit (decision 11); the encryption of the secret; the write. A taken name or UID is found by the unique index at the
 ///     write, so two additions of one account at once do not both pass.
 /// </summary>
 internal sealed class AddAccountCommandHandler(
@@ -43,9 +43,12 @@ internal sealed class AddAccountCommandHandler(
             throw new AccountRequestException([refused]);
         }
 
+        // The margin mode is kept with the account (design.md, decision 11); a refusal of Bybit saves nothing.
+        string? mode = await exchange.MarginModeAsync(apiKey, secret, cancellationToken);
+
         // The database keeps a moment to the microsecond: the account is answered with the moment it is read back with.
         DateTimeOffset now = time.GetUtcNow();
-        var account = new ExchangeAccount(Guid.NewGuid(), name, key.Uid, apiKey, now.AddTicks(-(now.Ticks % TimeSpan.TicksPerMicrosecond)));
+        var account = new ExchangeAccount(Guid.NewGuid(), name, key.Uid, apiKey, now.AddTicks(-(now.Ticks % TimeSpan.TicksPerMicrosecond)), mode);
         ProtectedSecret protectedSecret = protector.Protect(account.Id, secret);
         if (await accounts.AddAsync(account, protectedSecret, cancellationToken))
         {
