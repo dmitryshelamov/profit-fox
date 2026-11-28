@@ -667,6 +667,7 @@ export interface components {
         AccountBalanceResponse: {
             /** Format: double */
             free: number | string;
+            marginMode: null | string;
         };
         AccountResponse: {
             /** Format: uuid */
@@ -675,6 +676,7 @@ export interface components {
             /** Format: int64 */
             uid: number | string;
             apiKey: string;
+            marginMode: null | string;
             /** Format: date-time */
             createdAt: string;
         };

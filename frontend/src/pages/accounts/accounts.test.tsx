@@ -11,6 +11,7 @@ const main: Account = {
   name: 'Основной',
   uid: 104857321,
   apiKey: 'k3VbQ9xT2mLpA7dRw1',
+  marginMode: 'ISOLATED_MARGIN',
   createdAt: '2026-11-27T11:20:00Z',
 };
 
@@ -19,6 +20,7 @@ const ideas: Account = {
   name: 'Суб-счёт идей',
   uid: 104857998,
   apiKey: 'Zt81HcNq0sYeU4oPj6',
+  marginMode: null,
   createdAt: '2026-11-28T03:05:00Z',
 };
 
@@ -252,7 +254,8 @@ describe('the section «Аккаунты»', () => {
   it('shows the free USDT with a button to read them again, and a refusal of Bybit in red', async () => {
     let free = 0;
     const requests = routes([main, ideas], {
-      'GET /api/accounts/a1/balance': () => json({ free: ++free === 1 ? 1250.4 : 1300 }),
+      'GET /api/accounts/a1/balance': () =>
+        json({ free: ++free === 1 ? 1250.4 : 1300, marginMode: 'ISOLATED_MARGIN' }),
       'GET /api/accounts/a2/balance': () =>
         json(
           {
@@ -277,5 +280,47 @@ describe('the section «Аккаунты»', () => {
     expect(
       requests.filter((request) => new URL(request.url).pathname.endsWith('/balance')),
     ).toHaveLength(3);
+  });
+
+  // Change add-exchange-accounts, task 6.6: spec «Режим маржи аккаунта» — «Режим словами», «Неизвестный режим», «Список не
+  // ходит к Bybit».
+  it('writes the kept margin mode in words between the permissions and the free money, and «—» for another or none', async () => {
+    const requests = routes([
+      main,
+      { ...ideas, marginMode: 'REGULAR_MARGIN' },
+      { ...main, id: 'a3', name: 'Портфель', uid: 3, marginMode: 'PORTFOLIO_MARGIN' },
+      { ...main, id: 'a4', name: 'Новый режим', uid: 4, marginMode: 'FUTURE_MARGIN' },
+      { ...main, id: 'a5', name: 'Без режима', uid: 5, marginMode: null },
+    ]);
+    renderApp('/accounts');
+
+    await row('Основной');
+    const headers = screen.getAllByRole('columnheader').map((header) => header.textContent);
+    expect(headers.indexOf('Режим маржи')).toBe(headers.indexOf('Права ключа') + 1);
+    expect(headers.indexOf('Свободно, USDT')).toBe(headers.indexOf('Режим маржи') + 1);
+    expect(within(await row('Основной')).getByText('изолированная')).toBeInTheDocument();
+    expect(within(await row('Суб-счёт идей')).getByText('кросс')).toBeInTheDocument();
+    expect(within(await row('Портфель')).getByText('портфельная')).toBeInTheDocument();
+    expect(within(await row('Новый режим')).getByText('—')).toBeInTheDocument();
+    expect(within(await row('Без режима')).getByText('—')).toBeInTheDocument();
+    expect(
+      requests.filter((request) => new URL(request.url).pathname.startsWith('/api/accounts/')),
+    ).toEqual([]);
+  });
+
+  // Scenario «Режим обновлён по „Показать“».
+  it('shows the margin mode read with the balance in place of the kept one', async () => {
+    routes([main], {
+      'GET /api/accounts/a1/balance': () => json({ free: 10, marginMode: 'REGULAR_MARGIN' }),
+    });
+    renderApp('/accounts');
+    const first = within(await row('Основной'));
+    expect(first.getByText('изолированная')).toBeInTheDocument();
+
+    await userEvent.click(first.getByRole('button', { name: 'Показать баланс Основной' }));
+
+    expect(await first.findByText('кросс')).toBeInTheDocument();
+    expect(first.queryByText('изолированная')).not.toBeInTheDocument();
+    expect(first.getByText('10.00')).toBeInTheDocument();
   });
 });
