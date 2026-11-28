@@ -11,7 +11,7 @@ import {
   getPairOpenInterest,
 } from '@/api/market';
 import { isInstrumentKind, kindWords } from '@/modules/instrument-kind/useInstrumentKind';
-import { IdeaChoiceRow } from '@/pages/ideas/IdeaChoices';
+import { IdeaChoiceRow, storedIdeaChoices } from '@/pages/ideas/IdeaChoices';
 import { pairColumns } from '@/pages/ideas/ideaColumns';
 import { lengthOf, timeframes } from '@/preview/preview';
 import { Badge } from '@/shared/ui/Badge';
@@ -22,6 +22,7 @@ import { Pager } from '@/shared/ui/Pager';
 import { Segmented } from '@/shared/ui/Segmented';
 import { pageSearch, useListSettings } from '@/shared/ui/useListSettings';
 import { useNow } from '@/shared/ui/useNow';
+import { useStoredState } from '@/shared/ui/useStoredState';
 
 import { amountText, changeText, clockText, priceWords, rateText, signTone } from './format';
 import { marketRefreshMs } from './MarketPage';
@@ -433,7 +434,12 @@ function ChartSection({
   loadEarlierRef.current = loadEarlier;
 
   const list = useListSettings('pair-ideas', { field: 'moment', descending: true });
-  const [choices, setChoices] = useState<IdeaChoices>({});
+  // One set of choices for the ideas of every pair, kept in the browser.
+  const [choices, setChoices] = useStoredState<IdeaChoices>(
+    'profit-fox.choices.pair-ideas',
+    {},
+    storedIdeaChoices,
+  );
   // Led to an idea without a page in the address, the table asks the page that idea is on (task 18.22).
   const around = page === undefined && idea !== null ? idea : undefined;
   const ideas = useQuery({

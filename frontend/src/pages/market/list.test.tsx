@@ -69,6 +69,41 @@ describe('the sort of a list on the server', () => {
   });
 });
 
+describe('the choices of «Рынок» kept in the browser', () => {
+  it('opens with the search, the timeframe and «Только с идеями» chosen last', async () => {
+    const requests = fakeApi(routes());
+    const first = renderApp('/market');
+    await screen.findByRole('row', { name: 'P831USDT' });
+    await userEvent.type(screen.getByRole('textbox', { name: 'Поиск по символу' }), 'P8');
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Таймфрейм идеи' }), '1h');
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Только с идеями' }));
+    await waitFor(() => expect(last(requests).get('ideasOnly')).toBe('true'));
+    first.unmount();
+
+    const again = fakeApi(routes());
+    renderApp('/market');
+    await waitFor(() => expect(marketQueries(again)).not.toHaveLength(0));
+    expect(screen.getByRole('textbox', { name: 'Поиск по символу' })).toHaveValue('P8');
+    expect(screen.getByRole('combobox', { name: 'Таймфрейм идеи' })).toHaveValue('1h');
+    expect(screen.getByRole('checkbox', { name: 'Только с идеями' })).toBeChecked();
+    const query = marketQueries(again)[0]!;
+    expect([query.get('search'), query.get('timeframe'), query.get('ideasOnly')]).toEqual([
+      'P8',
+      '1h',
+      'true',
+    ]);
+  });
+
+  it('starts with no choices when the browser keeps something broken', async () => {
+    localStorage.setItem('profit-fox.choices.market', '{not json');
+    const requests = fakeApi(routes());
+    renderApp('/market');
+    await screen.findByRole('row', { name: 'P831USDT' });
+    expect(screen.getByRole('textbox', { name: 'Поиск по символу' })).toHaveValue('');
+    expect(marketQueries(requests)[0]!.get('search')).toBeNull();
+  });
+});
+
 // Spec bench-ui «Страницы списка».
 describe('the pages of a list', () => {
   // Scenario «Вторая страница».

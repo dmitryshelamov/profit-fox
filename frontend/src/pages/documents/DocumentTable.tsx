@@ -16,6 +16,7 @@ import { Menu, type MenuItem } from '@/shared/ui/Menu';
 import { PageTitle } from '@/shared/ui/Page';
 import { Table, Td, Th, Tr } from '@/shared/ui/Table';
 import { TextField } from '@/shared/ui/TextField';
+import { useStoredState } from '@/shared/ui/useStoredState';
 import { VersionBadge } from '@/shared/ui/VersionBadge';
 
 /** A line of a list of saved documents: what the list shows of one. */
@@ -101,7 +102,9 @@ export function DocumentTable<Line extends DocumentLine>({
   readonly tail?: ReactNode;
 }) {
   const queries = useQueryClient();
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useStoredState(`profit-fox.search.${type.listKey}`, '', (stored) =>
+    typeof stored === 'string' ? stored : undefined,
+  );
   const [asked, setAsked] = useState<Asked>(null);
   const [errors, setErrors] = useState<readonly RequestError[]>([]);
   const [busy, setBusy] = useState(false);
