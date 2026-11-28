@@ -138,7 +138,7 @@ public sealed class FakeLiveFeedTests
     /// <summary>
     ///     A closed minute of the fake: the usual prices, with <paramref name="volume" />.
     /// </summary>
-    public static CandleUpdate Minute(string instrument, DateTimeOffset open, string volume = "12.5", string close = "100.25", Exchange exchange = Exchange.Bybit)
+    public static CandleUpdate Minute(string instrument, DateTimeOffset open, string volume = "12.5", string close = "100.25", ProfitFox.Infrastructure.Clients.MarketData.Protos.Exchange exchange = ProfitFox.Infrastructure.Clients.MarketData.Protos.Exchange.Bybit)
     {
         CandleUpdate minute = FakeCandleFeed.Minute(instrument, open, volume, "6");
         minute.Close = close;

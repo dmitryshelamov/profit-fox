@@ -12,6 +12,7 @@ import { AccountsPage } from '@/pages/accounts/AccountsPage';
 import { IdeasPage } from '@/pages/ideas/IdeasPage';
 import { MarketPage } from '@/pages/market/MarketPage';
 import { clean, PairPage, pairSearch } from '@/pages/market/PairPage';
+import { RiskPage } from '@/pages/risk/RiskPage';
 import { RunFormPage } from '@/pages/runs/RunFormPage';
 import { RunPage } from '@/pages/runs/RunPage';
 import { RunsPage } from '@/pages/runs/RunsPage';
@@ -21,6 +22,7 @@ import { NewSignalPage, SavedSignalPage } from '@/pages/signals/SignalEditorPage
 import { SignalListPage } from '@/pages/signals/SignalListPage';
 import { NewStrategyPage, SavedStrategyPage } from '@/pages/strategies/StrategyEditorPage';
 import { StrategyListPage } from '@/pages/strategies/StrategyListPage';
+import { TradesPage } from '@/pages/trades/TradesPage';
 import { pageSearch } from '@/shared/ui/useListSettings';
 
 const rootRoute = createRootRoute({
@@ -230,6 +232,41 @@ const accountsRoute = createRoute({
   component: AccountsPage,
 });
 
+/** «Сделки», under the header (change take-idea-trades, design.md, decision 14). */
+const tradesRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/trades',
+  validateSearch: (search: Record<string, unknown>): { tab?: 'closed'; page?: number } => ({
+    ...(search.tab === 'closed' ? { tab: 'closed' as const } : {}),
+    ...pageSearch(search),
+  }),
+  component: function TradesRoute() {
+    const { tab, page } = tradesRoute.useSearch();
+    const navigate = tradesRoute.useNavigate();
+    return (
+      <TradesPage
+        tab={tab ?? 'open'}
+        page={page ?? 1}
+        onPlace={(next, number) =>
+          void navigate({
+            search: {
+              ...(next === 'closed' ? { tab: 'closed' as const } : {}),
+              ...(number > 1 ? { page: number } : {}),
+            },
+          })
+        }
+      />
+    );
+  },
+});
+
+/** «Риск», under the header: the state of the risk module and all its parameters. */
+const riskRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/risk',
+  component: RiskPage,
+});
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   shellRoute.addChildren([
@@ -241,6 +278,8 @@ const routeTree = rootRoute.addChildren([
     runRoute,
     setRoute,
     ideasRoute,
+    tradesRoute,
+    riskRoute,
     marketRoute,
     pairRoute,
     scoringRoute,

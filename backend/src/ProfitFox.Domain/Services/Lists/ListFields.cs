@@ -65,6 +65,33 @@ public static class ListFields
     ];
 
     /// <summary>
+    ///     The columns of the lists of trades (change take-idea-trades, design.md, decision 13): the open ones sort by the time
+    ///     of the click from the newest, the closed ones by the exit.
+    /// </summary>
+    public static readonly IReadOnlyList<ListField> Trades =
+    [
+        new ListField("symbol", "Пара", FieldType.Text, FieldPlace.Idea),
+        new ListField("account", "Аккаунт", FieldType.Text, FieldPlace.Idea),
+        new ListField("strategy", "Идея", FieldType.Text, FieldPlace.Idea),
+        new ListField("side", "Сторона", FieldType.Choice, FieldPlace.Idea, Values: [Long, Short]),
+        new ListField("amount", "Сумма", FieldType.Number, FieldPlace.Idea),
+        new ListField("created", "Клик", FieldType.Time, FieldPlace.Idea),
+        new ListField("entryTime", "Вход", FieldType.Time, FieldPlace.Idea),
+        new ListField("entry", "Цена входа", FieldType.Number, FieldPlace.Idea),
+        new ListField("stop", "Стоп", FieldType.Number, FieldPlace.Idea),
+        new ListField("target", "Цель", FieldType.Number, FieldPlace.Idea),
+        new ListField("left", "До срока", FieldType.Time, FieldPlace.Idea),
+        new ListField("now", "Сейчас", FieldType.Number, FieldPlace.Idea),
+        new ListField("state", "Состояние", FieldType.Choice, FieldPlace.Idea, Values: ["pending", "open", "closing", "closed", "cancelled", "error"]),
+        new ListField("exitTime", "Выход", FieldType.Time, FieldPlace.Idea),
+        new ListField("exitReason", "Чем закрыта", FieldType.Text, FieldPlace.Idea),
+        new ListField("fees", "Комиссии", FieldType.Number, FieldPlace.Idea),
+        new ListField("result", "Итог, USDT", FieldType.Number, FieldPlace.Idea),
+        new ListField("share", "Итог", FieldType.Number, FieldPlace.Idea, ListField.Percent),
+        new ListField("ideaResult", "Итог идеи", FieldType.Number, FieldPlace.Idea, ListField.Percent)
+    ];
+
+    /// <summary>
     ///     The columns of the summary of the journal.
     /// </summary>
     public static readonly IReadOnlyList<ListField> Summary =

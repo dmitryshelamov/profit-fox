@@ -12,6 +12,11 @@ public sealed class StubHttpHandler : HttpMessageHandler
 
     public List<(Uri Uri, Dictionary<string, string> Headers)> Requests { get; } = [];
 
+    /// <summary>
+    ///     The method and the body of each request, in the order of <see cref="Requests" /> (change take-idea-trades).
+    /// </summary>
+    public List<(HttpMethod Method, string Body)> Bodies { get; } = [];
+
     public StubHttpHandler Json(string json, HttpStatusCode status = HttpStatusCode.OK)
     {
         return Answer(() => new HttpResponseMessage(status) { Content = new StringContent(json) });
@@ -33,9 +38,10 @@ public sealed class StubHttpHandler : HttpMessageHandler
         return new HttpClient(this, disposeHandler: false);
     }
 
-    protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         Requests.Add((request.RequestUri!, request.Headers.ToDictionary(header => header.Key, header => string.Join(",", header.Value), StringComparer.OrdinalIgnoreCase)));
-        return Task.FromResult(_answers.Dequeue()());
+        Bodies.Add((request.Method, request.Content is null ? "" : await request.Content.ReadAsStringAsync(cancellationToken)));
+        return _answers.Dequeue()();
     }
 }

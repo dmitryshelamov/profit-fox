@@ -66,6 +66,38 @@ public sealed class MemoryExchangeAccountRepository : IExchangeAccountRepository
         return Task.FromResult(true);
     }
 
+    public Task SetFeedAsync(Guid id, string? feed, DateTimeOffset at, string worker, CancellationToken cancellationToken)
+    {
+        int index = _rows.FindIndex(row => row.Account.Id == id);
+        if (index >= 0 && _rows[index].Account.Feed != feed)
+        {
+            _rows[index] = (_rows[index].Account with { Feed = feed, FeedChangedAt = at }, _rows[index].Secret);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task SetFillsCursorAsync(Guid id, DateTimeOffset at, string worker, CancellationToken cancellationToken)
+    {
+        int index = _rows.FindIndex(row => row.Account.Id == id);
+        if (index >= 0)
+        {
+            _rows[index] = (_rows[index].Account with { FillsCursorAt = at }, _rows[index].Secret);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    ///     The accounts a trade of which holds a pair.
+    /// </summary>
+    public HashSet<Guid> Trading { get; } = [];
+
+    public Task<bool?> DeleteIdleAsync(Guid id, CancellationToken cancellationToken)
+    {
+        return Trading.Contains(id) ? Task.FromResult<bool?>(null) : Task.FromResult<bool?>(_rows.RemoveAll(row => row.Account.Id == id) == 1);
+    }
+
     public Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken)
     {
         return Task.FromResult(_rows.RemoveAll(row => row.Account.Id == id) == 1);

@@ -8,6 +8,7 @@ using ProfitFox.Application.Ports.MarketData;
 using ProfitFox.Infrastructure.Clients.MarketData;
 using ProfitFox.Infrastructure.Persistence.Files.HistoryCache;
 using ProfitFox.Presentation;
+using ProfitFox.Tests.Integration.Exchange;
 using ProfitFox.Tests.Integration.MarketData;
 
 namespace ProfitFox.Tests.Integration.Presentation;
@@ -19,7 +20,8 @@ namespace ProfitFox.Tests.Integration.Presentation;
 ///     the clock of the API and of the fake service is that one; with <paramref name="cache" /> history goes through the cache
 ///     of history in that folder (change add-backtest-history-cache). The master key is <see cref="TestMasterKey" /> unless
 ///     <paramref name="masterKey" /> gives another — empty for none (change add-exchange-accounts); Bybit is
-///     <paramref name="exchange" /> when given, and otherwise an address no request reaches, never the live Bybit.
+///     <paramref name="exchange" /> when given, and otherwise an address no request reaches, never the live Bybit; with
+///     <paramref name="bybit" /> every port of Bybit is that fake (change take-idea-trades).
 /// </summary>
 internal sealed class BenchTestApplication(
     MarketDataServer market,
@@ -27,7 +29,8 @@ internal sealed class BenchTestApplication(
     TimeProvider? time = null,
     string? cache = null,
     string masterKey = BenchTestApplication.TestMasterKey,
-    IExchangeKeyInspector? exchange = null) : WebApplicationFactory<Program>
+    IExchangeKeyInspector? exchange = null,
+    FakeBybit? bybit = null) : WebApplicationFactory<Program>
 {
     /// <summary>
     ///     The master key of the tests: the bytes 0 to 31 in base64. Not a secret of anything.
@@ -61,6 +64,7 @@ internal sealed class BenchTestApplication(
             services.AddSingleton<IInstrumentCatalog>(new InstrumentCatalog(market.Http));
             services.AddSingleton<IRecentHistory>(provider => new RestRecentHistory(market.Http, market.Channel, provider.GetService<TimeProvider>() ?? TimeProvider.System));
             services.AddSingleton<IMarketFeed>(provider => new GrpcMarketFeed(market.Channel, new InstrumentCatalog(market.Http), provider.GetService<TimeProvider>() ?? TimeProvider.System, new MarketFeedSettings { RetryDelay = TimeSpan.FromMilliseconds(50) }));
+            bybit?.Use(services);
             if (exchange is not null)
             {
                 services.AddSingleton(exchange);

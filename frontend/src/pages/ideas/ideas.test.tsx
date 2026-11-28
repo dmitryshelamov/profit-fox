@@ -60,6 +60,8 @@ describe('the section «Идеи»', () => {
       '245.54',
       '2 ч 28 мин',
       '+0.98 %',
+      // Change take-idea-trades: the column «Сделка»; the risk state is not routed here, so «Войти» waits for it.
+      'Войти',
     ]);
     expect(within(row).getByText('+0.98 %')).toHaveClass('text-ok');
     expect(screen.getByRole('tab', { name: /Открытые/ })).toHaveAttribute('aria-selected', 'true');
