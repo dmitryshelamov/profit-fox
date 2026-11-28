@@ -69,7 +69,7 @@ public static class IdeaResponses
 
     public static IdeaScoresResponse Of(IdeaScoresResult result)
     {
-        return new IdeaScoresResponse([.. result.Rows.Select(row => new IdeaScoreResponse(row.Score, row.Ideas, row.Wins, row.Mean, row.Sum))], result.FilterGone);
+        return new IdeaScoresResponse([.. result.Rows.Select(row => new IdeaScoreResponse(row.From, row.To, row.Ideas, row.Wins, row.Mean, row.Sum))], result.FilterGone);
     }
 
     public static IdeaStrategyCountsResponse Of(IdeaStrategiesResult result)

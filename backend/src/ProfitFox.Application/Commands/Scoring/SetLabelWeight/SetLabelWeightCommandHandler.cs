@@ -16,13 +16,13 @@ namespace ProfitFox.Application.Commands.Scoring.SetLabelWeight;
 internal sealed class SetLabelWeightCommandHandler(ILabelWeightRepository weights, ISignalLabelRepository labels)
     : IRequestHandler<SetLabelWeightCommand, ScoringLabel>
 {
-    /// <exception cref="IdeasRequestException">A weight is not a whole number from −3 to +3.</exception>
+    /// <exception cref="IdeasRequestException">A weight is not a number from −100 to +100 with at most two digits after the point.</exception>
     /// <exception cref="LabelNotFoundException">There is no label with the text.</exception>
     public async Task<ScoringLabel> Handle(SetLabelWeightCommand request, CancellationToken cancellationToken)
     {
         List<PreviewErrorInternal> errors = [];
-        Check(errors, "longWeight", "лонга", request.LongWeight);
-        Check(errors, "shortWeight", "шорта", request.ShortWeight);
+        Check(errors, "longWeight", request.LongWeight);
+        Check(errors, "shortWeight", request.ShortWeight);
         if (errors.Count > 0)
         {
             throw new IdeasRequestException(errors);
@@ -34,15 +34,16 @@ internal sealed class SetLabelWeightCommandHandler(ILabelWeightRepository weight
             throw new LabelNotFoundException(text);
         }
 
-        await weights.SetAsync(new LabelWeight(text, (int)request.LongWeight!.Value, (int)request.ShortWeight!.Value), cancellationToken);
+        await weights.SetAsync(new LabelWeight(text, request.LongWeight!.Value, request.ShortWeight!.Value), cancellationToken);
         return (await GetScoringLabelsQueryHandler.RowsAsync(weights, cancellationToken)).First(row => row.Text == text);
     }
 
-    private static void Check(List<PreviewErrorInternal> errors, string field, string side, decimal? weight)
+    // The text of the error is that of change decimal-label-weights, design.md, decision 2.
+    private static void Check(List<PreviewErrorInternal> errors, string field, decimal? weight)
     {
         if (weight is not { } value || !LabelWeight.Valid(value))
         {
-            errors.Add(new PreviewErrorInternal("InvalidWeight", $"вес {side} — целое от {LabelWeight.Min} до +{LabelWeight.Max}") { Field = field });
+            errors.Add(new PreviewErrorInternal("InvalidWeight", "вес от −100 до +100, не больше двух знаков после точки") { Field = field });
         }
     }
 }

@@ -38,7 +38,7 @@ public class IdeasController(ISender sender) : ControllerBase
     /// <param name="period">Closed ideas with the exit in the last days.</param>
     /// <param name="filter">A saved filter of «Идеи».</param>
     /// <param name="kind">The kind of the pair of the idea: <c>crypto</c> or <c>stock</c>; every kind when not given.</param>
-    /// <param name="minScore">Only ideas with a score of at least this whole number.</param>
+    /// <param name="minScore">Only ideas with a score of at least this number, with at most two digits after the point.</param>
     /// <param name="cancellation">The request was given up.</param>
     [HttpGet(Name = "ListIdeas")]
     [ProducesResponseType<IdeaPageResponse>(StatusCodes.Status200OK)]
@@ -97,8 +97,9 @@ public class IdeasController(ISender sender) : ControllerBase
 
     /// <summary>
     ///     The outcomes of the closed ideas by their score now (change add-idea-score, spec idea-score «Итоги по баллу»): a row
-    ///     a score with at least one idea, from the highest, with the choices, the period and the saved filter of the journal;
-    ///     excluded ideas do not count. A choice outside its list or a least score that is not whole answers 422.
+    ///     a group of scores half a point wide with at least one idea, from the highest (change decimal-label-weights), with
+    ///     the choices, the period and the saved filter of the journal; excluded ideas do not count. A choice outside its list
+    ///     or a least score that is not a number with at most two digits after the point answers 422.
     /// </summary>
     /// <param name="search">A part of the symbol.</param>
     /// <param name="strategy">The name of a strategy.</param>
@@ -109,7 +110,7 @@ public class IdeasController(ISender sender) : ControllerBase
     /// <param name="period">Closed ideas with the exit in the last days.</param>
     /// <param name="filter">A saved filter of «Идеи».</param>
     /// <param name="kind">The kind of the pair of the idea: <c>crypto</c> or <c>stock</c>; every kind when not given.</param>
-    /// <param name="minScore">Only ideas with a score of at least this whole number.</param>
+    /// <param name="minScore">Only ideas with a score of at least this number, with at most two digits after the point.</param>
     /// <param name="cancellation">The request was given up.</param>
     [HttpGet("scores", Name = "ScoreIdeas")]
     [ProducesResponseType<IdeaScoresResponse>(StatusCodes.Status200OK)]
@@ -148,7 +149,7 @@ public class IdeasController(ISender sender) : ControllerBase
     /// <param name="period">Closed ideas with the exit in the last days.</param>
     /// <param name="filter">A saved filter of «Идеи».</param>
     /// <param name="kind">The kind of the pair of the idea: <c>crypto</c> or <c>stock</c>; every kind when not given.</param>
-    /// <param name="minScore">Only ideas with a score of at least this whole number.</param>
+    /// <param name="minScore">Only ideas with a score of at least this number, with at most two digits after the point.</param>
     /// <param name="cancellation">The request was given up.</param>
     [HttpGet("strategies", Name = "CountIdeasByStrategy")]
     [ProducesResponseType<IdeaStrategyCountsResponse>(StatusCodes.Status200OK)]

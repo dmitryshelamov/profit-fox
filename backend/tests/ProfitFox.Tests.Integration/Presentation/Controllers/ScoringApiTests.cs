@@ -66,19 +66,34 @@ public sealed class ScoringApiTests
     }
 
     [Test]
-    public async Task A_weight_out_of_range_or_not_whole_answers_422_and_a_text_without_a_label_404()
+    // Change decimal-label-weights, task 2.2: spec idea-score «Вес вне диапазона», «Вес дальше сотых».
+    public async Task A_weight_out_of_range_or_past_the_hundredths_answers_422_and_a_text_without_a_label_404()
     {
         await Label("btc-down-4h", true, "↓ BTC 4h", "4h");
 
-        HttpResponseMessage high = await _api.Http.PutAsJsonAsync("/api/scoring/weights", new { text = "↓ BTC 4h", longWeight = 4, shortWeight = 0 }, Json);
-        HttpResponseMessage half = await _api.Http.PutAsJsonAsync("/api/scoring/weights", new { text = "↓ BTC 4h", longWeight = 0, shortWeight = 0.5 }, Json);
+        HttpResponseMessage high = await _api.Http.PutAsJsonAsync("/api/scoring/weights", new { text = "↓ BTC 4h", longWeight = 101, shortWeight = 0 }, Json);
+        HttpResponseMessage thousandths = await _api.Http.PutAsJsonAsync("/api/scoring/weights", new { text = "↓ BTC 4h", longWeight = 0, shortWeight = 0.125 }, Json);
         HttpResponseMessage missing = await _api.Http.PutAsJsonAsync("/api/scoring/weights", new { text = "нет такой", longWeight = 1, shortWeight = 1 }, Json);
 
         Assert.That(await Errors(high), Is.EqualTo(new[] { ("InvalidWeight", (string?)"longWeight") }));
-        Assert.That(await Errors(half), Is.EqualTo(new[] { ("InvalidWeight", (string?)"shortWeight") }));
+        Assert.That(await Errors(thousandths), Is.EqualTo(new[] { ("InvalidWeight", (string?)"shortWeight") }));
         Assert.That(missing.StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
         ScoringLabelResponse[] labels = (await _api.Http.GetFromJsonAsync<ScoringLabelResponse[]>("/api/scoring/labels", Json))!;
-        Assert.That(labels.Select(label => (label.Text, label.LongWeight, label.ShortWeight)), Is.EqualTo(new[] { ("↓ BTC 4h", 0, 0), ("⚡ всплеск", 0, 0) }), "nothing changed");
+        Assert.That(labels.Select(label => (label.Text, label.LongWeight, label.ShortWeight)), Is.EqualTo(new[] { ("↓ BTC 4h", 0m, 0m), ("⚡ всплеск", 0m, 0m) }), "nothing changed");
+    }
+
+    // Change decimal-label-weights, task 2.3: spec idea-score «Дробный вес» through the API, as a number of JSON.
+    [Test]
+    public async Task A_weight_with_hundredths_is_saved_and_the_labels_give_it_as_a_number()
+    {
+        await Label("btc-down-15m", true, "↓ BTC 15m", "15m");
+
+        HttpResponseMessage set = await _api.Http.PutAsJsonAsync("/api/scoring/weights", new { text = "↓ BTC 15m", longWeight = -0.5, shortWeight = 0.25 }, Json);
+        JsonArray labels = (await _api.Http.GetFromJsonAsync<JsonArray>("/api/scoring/labels", Json))!;
+
+        Assert.That(set.StatusCode, Is.EqualTo(HttpStatusCode.OK), await set.Content.ReadAsStringAsync());
+        JsonNode row = labels.Single(label => (string?)label!["text"] == "↓ BTC 15m")!;
+        Assert.That((row["longWeight"]!.GetValueKind(), (decimal)row["longWeight"]!, (decimal)row["shortWeight"]!), Is.EqualTo((JsonValueKind.Number, -0.5m, 0.25m)));
     }
 
     [Test]
@@ -115,17 +130,38 @@ public sealed class ScoringApiTests
         IdeaStrategyCountsResponse counts = (await _api.Http.GetFromJsonAsync<IdeaStrategyCountsResponse>("/api/ideas/strategies?minScore=-1", Json))!;
         IdeaScoresResponse scores = (await _api.Http.GetFromJsonAsync<IdeaScoresResponse>("/api/ideas/scores", Json))!;
         HttpResponseMessage word = await _api.Http.GetAsync("/api/ideas?minScore=abc");
-        HttpResponseMessage strategiesWord = await _api.Http.GetAsync("/api/ideas/strategies?minScore=1.5");
+        HttpResponseMessage strategiesWord = await _api.Http.GetAsync("/api/ideas/strategies?minScore=0.125");
         HttpResponseMessage scoresWord = await _api.Http.GetAsync("/api/ideas/scores?minScore=abc");
 
-        Assert.That(sorted.Items.Select(idea => (idea.Symbol, idea.Score)), Is.EqualTo(new[] { ("AUSDT", 3), ("BUSDT", 2), ("CUSDT", 0) }));
+        Assert.That(sorted.Items.Select(idea => (idea.Symbol, idea.Score)), Is.EqualTo(new[] { ("AUSDT", 3m), ("BUSDT", 2m), ("CUSDT", 0m) }));
         Assert.That((fromTwo.Total, fromTwo.Items.Select(idea => idea.Symbol).Order().ToArray()), Is.EqualTo((2, new[] { "AUSDT", "BUSDT" })).Using<(int, string[])>((a, b) => a.Item1 == b.Item1 && a.Item2.SequenceEqual(b.Item2)));
         Assert.That(summary.Items.Single().Ideas, Is.EqualTo(1));
         Assert.That(counts.Total, Is.EqualTo(3));
-        Assert.That(scores.Rows.Select(row => (row.Score, row.Ideas)), Is.EqualTo(new[] { (2, 1), (0, 1) }));
+        Assert.That(scores.Rows.Select(row => (row.From, row.To, row.Ideas)), Is.EqualTo(new[] { (2m, 2.5m, 1), (0m, 0.5m, 1) }));
         Assert.That(await Errors(word), Is.EqualTo(new[] { ("InvalidMinScore", (string?)"minScore") }));
         Assert.That(await Errors(strategiesWord), Is.EqualTo(new[] { ("InvalidMinScore", (string?)"minScore") }));
         Assert.That(await Errors(scoresWord), Is.EqualTo(new[] { ("InvalidMinScore", (string?)"minScore") }));
+    }
+
+    // Change decimal-label-weights, task 2.5: spec idea-score «Дробный порог» through the API.
+    [Test]
+    public async Task A_least_score_with_hundredths_takes_the_ideas_with_at_least_that_score()
+    {
+        await Label("plus-one-and-a-half", true, "плюс 1.5", "1h");
+        await Label("plus-one-and-a-quarter", true, "плюс 1.25", "1h");
+        await Label("plus-three-quarters", true, "плюс 0.75", "1h");
+        await _api.Http.PutAsJsonAsync("/api/scoring/weights", new { text = "плюс 1.5", longWeight = 0, shortWeight = 1.5 }, Json);
+        await _api.Http.PutAsJsonAsync("/api/scoring/weights", new { text = "плюс 1.25", longWeight = 0, shortWeight = 1.25 }, Json);
+        await _api.Http.PutAsJsonAsync("/api/scoring/weights", new { text = "плюс 0.75", longWeight = 0, shortWeight = 0.75 }, Json);
+        await Add(IdeaGenerator.Generate(symbol: "AUSDT", side: EntrySide.Short, labels: ["плюс 1.5"]));
+        await Add(IdeaGenerator.Generate(symbol: "BUSDT", side: EntrySide.Short, labels: ["плюс 1.25"]));
+        await Add(IdeaGenerator.Generate(symbol: "CUSDT", side: EntrySide.Short, labels: ["плюс 0.75"]));
+
+        IdeaPageResponse page = (await _api.Http.GetFromJsonAsync<IdeaPageResponse>("/api/ideas?minScore=1.25&sort=score&direction=desc", Json))!;
+        IdeaStrategyCountsResponse counts = (await _api.Http.GetFromJsonAsync<IdeaStrategyCountsResponse>("/api/ideas/strategies?minScore=1.25", Json))!;
+
+        Assert.That(page.Items.Select(idea => (idea.Symbol, idea.Score)), Is.EqualTo(new[] { ("AUSDT", 1.5m), ("BUSDT", 1.25m) }));
+        Assert.That(counts.Total, Is.EqualTo(2));
     }
 
     private static async Task<(string Code, string? Field)[]> Errors(HttpResponseMessage response)

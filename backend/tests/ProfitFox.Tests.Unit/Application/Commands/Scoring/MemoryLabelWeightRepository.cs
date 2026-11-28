@@ -25,7 +25,7 @@ public sealed class MemoryLabelWeightRepository(MemorySignalLabelRepository labe
     {
         if (!LabelWeight.Valid(weight.Long) || !LabelWeight.Valid(weight.Short))
         {
-            throw new InvalidOperationException("the database refuses a weight outside −3…3");
+            throw new InvalidOperationException("the database refuses a weight outside −100…100");
         }
 
         Writes++;

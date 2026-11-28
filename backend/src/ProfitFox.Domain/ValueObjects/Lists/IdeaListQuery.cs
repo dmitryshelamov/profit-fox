@@ -33,4 +33,4 @@ public sealed record IdeaListQuery(
     DateTimeOffset? To = null,
     Guid? Around = null,
     InstrumentKind? PairKind = null,
-    int? MinScore = null);
+    decimal? MinScore = null);

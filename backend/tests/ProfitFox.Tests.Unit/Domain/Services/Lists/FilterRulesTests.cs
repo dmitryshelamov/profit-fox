@@ -35,18 +35,21 @@ public sealed class FilterRulesTests
     }
 
     /// <summary>
-    ///     Change add-idea-score, task 2.5: spec saved-filters «Поля фильтра» — the score is an idea field of whole numbers.
+    ///     Change add-idea-score, task 2.5, and change decimal-label-weights, task 2.6: spec saved-filters «Поля фильтра»,
+    ///     «Дробный балл в фильтре» — the score is an idea field of numbers with at most two digits after the point.
     /// </summary>
     [Test]
-    public void The_score_is_a_field_of_an_idea_and_takes_a_whole_number()
+    public void The_score_is_a_field_of_an_idea_and_takes_a_number_with_at_most_two_digits_after_the_point()
     {
         ListField score = ListFields.Filter.Single(field => field.Name == "score");
 
         Assert.That((score.Type, score.Place, score.Unit), Is.EqualTo((FieldType.Number, FieldPlace.Idea, (string?)null)));
-        Assert.That(FilterRules.CheckConditions([new FilterCondition("score", "ge", "2"), new FilterCondition("score", "between", "-1", "3")]), Is.Empty);
         Assert.That(
-            FilterRules.CheckConditions([new FilterCondition("score", "ge", "1.5"), new FilterCondition("score", "between", "0", "0,5")]).Select(problem => problem.Condition),
-            Is.EqualTo(new int?[] { 0, 1 }));
+            FilterRules.CheckConditions([new FilterCondition("score", "ge", "2"), new FilterCondition("score", "between", "-1", "3"), new FilterCondition("score", "ge", "1.25"), new FilterCondition("score", "between", "-0.5", "0,75")]),
+            Is.Empty);
+        FilterProblem[] problems = [.. FilterRules.CheckConditions([new FilterCondition("score", "ge", "0.125"), new FilterCondition("score", "between", "0", "1.005")])];
+        Assert.That(problems.Select(problem => problem.Condition), Is.EqualTo(new int?[] { 0, 1 }));
+        Assert.That(problems.Select(problem => problem.Reason).Distinct(), Is.EqualTo(new[] { "значение поля Балл — число, не больше двух знаков после точки" }));
         Assert.That(ListFields.Ideas.Single(field => field.Name == "score").Type, Is.EqualTo(FieldType.Number), "the lists sort by it");
     }
 

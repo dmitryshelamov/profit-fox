@@ -1,6 +1,6 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { useState } from 'react';
+import { type KeyboardEvent, useRef, useState } from 'react';
 
 import { ApiError } from '@/api/client';
 import { type IdeaChoices, type IdeaScore, scoreIdeas } from '@/api/ideas';
@@ -12,19 +12,20 @@ import {
   type ScoringLabel,
   scoringLabelsKey,
   setLabelWeight,
-  weights,
 } from '@/api/scoring';
 import { listStrategies } from '@/api/strategies';
 import { KindChoice } from '@/modules/instrument-kind/KindChoice';
 import { periods } from '@/pages/ideas/IdeaChoices';
+import { decimalText } from '@/pages/ideas/useMinScore';
 import { changeText, signedAmount, signTone } from '@/pages/market/format';
 import { timeframes } from '@/preview/preview';
 import { Badge } from '@/shared/ui/Badge';
 import { Page, PageTitle } from '@/shared/ui/Page';
 import { SelectField } from '@/shared/ui/SelectField';
 import { Table, Td, Th, Tr } from '@/shared/ui/Table';
+import { TextField } from '@/shared/ui/TextField';
 
-/** A score with fewer closed ideas than this is a small sample (spec idea-score «Итоги по баллу на странице «Скоринг»»). */
+/** A group of scores with fewer closed ideas than this is a small sample (spec idea-score «Итоги по баллу на странице «Скоринг»»). */
 export const smallSample = 30;
 
 const labelsKey = scoringLabelsKey;
@@ -64,7 +65,10 @@ function Weights() {
 
   return (
     <section aria-label="Веса меток" className="flex flex-col gap-4">
-      <SectionHead title="Веса меток" note="Вес — целое от −3 до +3; нет веса — 0" />
+      <SectionHead
+        title="Веса меток"
+        note="Вес — число от −100 до +100, до сотых; Enter или уход из поля сохраняет; нет веса — 0"
+      />
       {labels.isError && (
         <p role="alert" className="text-err">
           {labels.error.message}
@@ -103,18 +107,25 @@ function Weights() {
   );
 }
 
-// A weight chosen shows at once; a refusal puts the weight before back and tells why in the row (scenario «Отказ
-// сервера»), and a label gone since the table was read rereads it (task 8.7). A weight saved rereads the outcomes by
-// score (scenario «Правка веса»).
+// A weight typed stays in its field while it is saved; a refusal puts the weight before back and tells why in the row
+// (scenario «Отказ сервера»), and a label gone since the table was read rereads it (task 8.7). A weight saved rereads the
+// outcomes by score (scenario «Правка веса»). A refusal remounts the fields, so they show the weights of the row again.
 function WeightRow({ row }: { readonly row: ScoringLabel }) {
   const client = useQueryClient();
-  const [draft, setDraft] = useState<{ long: number; short: number } | null>(null);
+  // The weights last sent: a second weight typed while the first is being saved goes with the first, not with the weight
+  // of the row before it, or the second save would put the first weight back. A refusal forgets them.
+  const sent = useRef<{ long: number; short: number } | null>(null);
+  const [refusals, setRefusals] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const refused = (why: string) => {
+    sent.current = null;
+    setError(why);
+    setRefusals((count) => count + 1);
+  };
   const save = useMutation({
     mutationFn: (next: { long: number; short: number }) =>
       setLabelWeight(row.text, next.long, next.short),
     onSuccess: (result) => {
-      setDraft(null);
       if (result.ok) {
         setError(null);
         client.setQueryData<ScoringLabel[]>(labelsKey, (old) =>
@@ -123,26 +134,26 @@ function WeightRow({ row }: { readonly row: ScoringLabel }) {
         void client.invalidateQueries({ queryKey: scoresKey });
         void client.invalidateQueries({ queryKey: ['ideas'] });
       } else {
-        setError(
+        refused(
           `Вес не сохранён: ${result.errors.map((problem) => problem.reason).join('; ')}. Стоит прежний вес.`,
         );
       }
     },
     onError: (failure) => {
-      setDraft(null);
       if (failure instanceof ApiError && failure.status === 404) {
         // The label was renamed or its signal deleted while the page was open: the table is read again.
-        setError('Вес не сохранён: такой метки больше нет. Таблица перечитана.');
+        refused('Вес не сохранён: такой метки больше нет. Таблица перечитана.');
         void client.invalidateQueries({ queryKey: labelsKey });
       } else {
-        setError('Вес не сохранён: сервер не ответил. Стоит прежний вес.');
+        refused('Вес не сохранён: сервер не ответил. Стоит прежний вес.');
       }
     },
   });
-  const long = draft?.long ?? Number(row.longWeight);
-  const short = draft?.short ?? Number(row.shortWeight);
-  const choose = (next: { long: number; short: number }) => {
-    setDraft(next);
+  const long = Number(row.longWeight);
+  const short = Number(row.shortWeight);
+  const choose = (change: { long?: number; short?: number }) => {
+    const next = { ...(sent.current ?? { long, short }), ...change };
+    sent.current = next;
     save.mutate(next);
   };
 
@@ -163,19 +174,21 @@ function WeightRow({ row }: { readonly row: ScoringLabel }) {
         )}
       </Td>
       <Td>
-        <WeightChoice
+        <WeightField
+          key={`${String(long)}:${String(refusals)}`}
           label={`Вес лонга ${row.text}`}
           value={long}
           failed={error !== null}
-          onChange={(value) => choose({ long: value, short })}
+          onCommit={(value) => choose({ long: value })}
         />
       </Td>
       <Td>
-        <WeightChoice
+        <WeightField
+          key={`${String(short)}:${String(refusals)}`}
           label={`Вес шорта ${row.text}`}
           value={short}
           failed={error !== null}
-          onChange={(value) => choose({ long, short: value })}
+          onCommit={(value) => choose({ short: value })}
         />
       </Td>
       <Td className="text-right text-[12px] text-err">
@@ -185,39 +198,61 @@ function WeightRow({ row }: { readonly row: ScoringLabel }) {
   );
 }
 
-// The tone of a weight colors the text of its select: the class of the field goes to its frame.
-const selectTone: Record<string, string> = {
-  'text-ok': '[&>select]:text-ok',
-  'text-err': '[&>select]:text-err',
-  'text-muted': '[&>select]:text-muted',
+// The tone of a weight colors the text of its field: the class of the field goes to its frame.
+const fieldTone: Record<string, string> = {
+  'text-ok': '[&>input]:text-ok',
+  'text-err': '[&>input]:text-err',
+  'text-muted': '[&>input]:text-muted',
 };
 
-function WeightChoice({
+/**
+ * The field of a weight (change decimal-label-weights, design.md, decision 5): a number in hundredths, saved by Enter or
+ * by leaving the field when it differs from the weight and from the number already sent (scenario «Уход из поля без
+ * правки»). An empty field leaves the weight as it is.
+ */
+function WeightField({
   label,
   value,
   failed,
-  onChange,
+  onCommit,
 }: {
   readonly label: string;
   readonly value: number;
   readonly failed: boolean;
-  readonly onChange: (value: number) => void;
+  readonly onCommit: (value: number) => void;
 }) {
+  const [text, setText] = useState(String(value));
+  const sent = useRef<number | null>(null);
+  const commit = () => {
+    const next = Number(decimalText(text));
+    if (text.trim() === '' || !Number.isFinite(next)) {
+      setText(String(value));
+      return;
+    }
+
+    if (next !== value && next !== sent.current) {
+      sent.current = next;
+      onCommit(next);
+    }
+  };
+  const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter') {
+      commit();
+    }
+  };
+
   return (
-    <SelectField
+    <TextField
       mono
+      inputMode="decimal"
       aria-label={label}
       aria-invalid={failed}
-      className={`w-[84px] ${selectTone[scoreTone(value)] ?? ''}`}
-      value={value}
-      onChange={(event) => onChange(Number(event.target.value))}
-    >
-      {weights.map((weight) => (
-        <option key={weight} value={weight}>
-          {scoreText(weight)}
-        </option>
-      ))}
-    </SelectField>
+      className={`w-[104px] ${fieldTone[scoreTone(text.trim() === '' ? value : decimalText(text))] ?? ''}`}
+      value={text}
+      onChange={(event) => setText(event.target.value)}
+      onKeyDown={onKeyDown}
+      onBlur={commit}
+    />
   );
 }
 
@@ -325,7 +360,7 @@ function Scores() {
             </thead>
             <tbody>
               {rows.map((row) => (
-                <ScoreRow key={String(row.score)} row={row} />
+                <ScoreRow key={String(row.from)} row={row} />
               ))}
             </tbody>
           </Table>
@@ -338,14 +373,17 @@ function Scores() {
   );
 }
 
+// A group of scores by its bounds, «от +0.5 до +1» (change decimal-label-weights, design.md, decision 4), in the tone of
+// its lower bound.
 function ScoreRow({ row }: { readonly row: IdeaScore }) {
   const small = Number(row.ideas) < smallSample;
+  const bounds = `от ${scoreText(row.from)} до ${scoreText(row.to)}`;
 
   return (
-    <Tr className="h-10 font-mono" aria-label={`Балл ${scoreText(row.score)}`}>
+    <Tr className="h-10 font-mono" aria-label={`Балл ${bounds}`}>
       <Td>
         <span className="flex items-center gap-3">
-          <span className={scoreTone(row.score)}>{scoreText(row.score)}</span>
+          <span className={scoreTone(row.from)}>{bounds}</span>
           {small && (
             <Badge tone="warn" className="font-sans">
               мало идей &lt; {smallSample}

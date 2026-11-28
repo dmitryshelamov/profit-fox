@@ -117,10 +117,11 @@ public static class FilterRules
                 return $"значение поля {field.Title} — число";
             }
 
-            // The score is a whole number (change add-idea-score, spec saved-filters «Поля фильтра»).
-            if (field.Name == ListFields.Score && (!Whole(condition.Value) || (condition.Operator == "between" && !Whole(condition.To))))
+            // The score is a number with at most two digits after the point (change decimal-label-weights, spec saved-filters
+            // «Поля фильтра»).
+            if (field.Name == ListFields.Score && (!Hundredths(condition.Value) || (condition.Operator == "between" && !Hundredths(condition.To))))
             {
-                return $"значение поля {field.Title} — целое число";
+                return $"значение поля {field.Title} — число, не больше двух знаков после точки";
             }
 
             // A value that does not fit once in the unit of the store (task 18.17): 7.9e22 million is more than a decimal holds.
@@ -147,9 +148,9 @@ public static class FilterRules
             : null;
     }
 
-    private static bool Whole(string? text)
+    private static bool Hundredths(string? text)
     {
-        return Number(text) is { } value && value == decimal.Truncate(value);
+        return Number(text) is { } value && value == decimal.Round(value, 2);
     }
 
     private static bool Fits(ListField field, string? text)

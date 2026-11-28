@@ -846,12 +846,14 @@ export interface components {
             /** Format: double */
             resultUsdt: null | number | string;
             excluded: null | string;
-            /** Format: int32 */
+            /** Format: double */
             score: number | string;
         };
         IdeaScoreResponse: {
-            /** Format: int32 */
-            score: number | string;
+            /** Format: double */
+            from: number | string;
+            /** Format: double */
+            to: number | string;
             /** Format: int32 */
             ideas: number | string;
             /** Format: double */
@@ -1188,9 +1190,9 @@ export interface components {
             enabled: boolean;
             timeframe: null | string;
             signal: null | string;
-            /** Format: int32 */
+            /** Format: double */
             longWeight: number | string;
-            /** Format: int32 */
+            /** Format: double */
             shortWeight: number | string;
             builtIn: boolean;
         };
