@@ -53,6 +53,7 @@ describe('the section «Риск»', () => {
     expect(strip).toHaveTextContent('300 из 1 000 USDT');
     expect(strip).toHaveTextContent('работает');
     expect(strip).toHaveTextContent('Bybit: поток · 1 аккаунт');
+    expect(within(strip).queryByTestId('closed-result')).toBeNull();
   });
 
   // Scenario «Пределы не заданы».

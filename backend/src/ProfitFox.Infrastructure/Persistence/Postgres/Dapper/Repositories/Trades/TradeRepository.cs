@@ -204,11 +204,15 @@ internal sealed class TradeRepository(NpgsqlDataSource database) : ITradeReposit
         return new ListPage<TradeListItem>([.. rows.Select(row => new TradeListItem(row.ToDomain(), row.IdeaResult))], total, query.Order.Page, query.Order.PageSize);
     }
 
-    public async Task<(int Open, int Closed)> CountsAsync(CancellationToken cancellationToken)
+    public async Task<(int Open, int Closed, decimal Result, decimal Fees)> CountsAsync(CancellationToken cancellationToken)
     {
         await using NpgsqlConnection connection = await database.OpenConnectionAsync(cancellationToken);
-        return await connection.QuerySingleAsync<(int, int)>(new CommandDefinition(
-            $"SELECT count(*) FILTER (WHERE state IN {TradeRows.Holding})::int, count(*) FILTER (WHERE state IN ('closed', 'cancelled'))::int FROM trades",
+        return await connection.QuerySingleAsync<(int, int, decimal, decimal)>(new CommandDefinition(
+            $"""
+             SELECT count(*) FILTER (WHERE state IN {TradeRows.Holding})::int, count(*) FILTER (WHERE state IN ('closed', 'cancelled'))::int,
+                    coalesce(sum(result) FILTER (WHERE state = 'closed'), 0), coalesce(sum(fees) FILTER (WHERE state = 'closed'), 0)
+             FROM trades
+             """,
             cancellationToken: cancellationToken));
     }
 

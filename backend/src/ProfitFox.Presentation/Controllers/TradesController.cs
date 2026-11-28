@@ -82,7 +82,9 @@ public class TradesController(ISender sender) : ControllerBase
                 result.Page.Page,
                 result.Page.PageSize,
                 result.Open,
-                result.Closed);
+                result.Closed,
+                decimal.Round(result.ClosedResult, 2),
+                decimal.Round(result.ClosedFees, 2));
         });
     }
 

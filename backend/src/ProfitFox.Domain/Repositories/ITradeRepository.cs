@@ -63,9 +63,10 @@ public interface ITradeRepository
     Task<ListPage<TradeListItem>> ListAsync(TradeListQuery query, CancellationToken cancellationToken);
 
     /// <summary>
-    ///     How many trades hold their pairs and how many are closed or cancelled.
+    ///     How many trades hold their pairs and how many are closed or cancelled, and over the closed ones the sum of their
+    ///     outcomes — net of fees, with funding — and the sum of their fees.
     /// </summary>
-    Task<(int Open, int Closed)> CountsAsync(CancellationToken cancellationToken);
+    Task<(int Open, int Closed, decimal Result, decimal Fees)> CountsAsync(CancellationToken cancellationToken);
 
     /// <summary>
     ///     The outcomes of the trades closed from <paramref name="from" />, and the results now of the trades that hold their pairs.

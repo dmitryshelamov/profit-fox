@@ -1675,6 +1675,10 @@ export interface components {
             open: number | string;
             /** Format: int32 */
             closed: number | string;
+            /** Format: double */
+            closedResult: number | string;
+            /** Format: double */
+            closedFees: number | string;
         };
         TradeResponse: {
             /** Format: uuid */

@@ -186,6 +186,26 @@ public sealed class TradeRepositoryTests
         Assert.That((closed.Count, open), Is.EqualTo((0, new[] { -12m })));
     }
 
+    [Test]
+    public async Task The_counts_sum_the_outcomes_and_the_fees_of_the_closed_trades_only()
+    {
+        ExchangeAccount account = await TradeStore.Account();
+        Trade won = (await TradeStore.Open(TradeGenerator.Long(account.Id, symbol: "SOLUSDT", created: Now())))!;
+        Trade lost = (await TradeStore.Open(TradeGenerator.Long(account.Id, symbol: "XRPUSDT", created: Now())))!;
+        Trade holding = (await TradeStore.Open(TradeGenerator.Long(account.Id, symbol: "ADAUSDT", created: Now())))!;
+        await using (NpgsqlConnection connection = await BenchDatabase.DataSource.OpenConnectionAsync())
+        {
+            await connection.ExecuteAsync(
+                "UPDATE trades SET state = 'closed', closed_at = now(), result = @Result, fees = @Fees WHERE id = @Id",
+                new[] { new { won.Id, Result = 5.5m, Fees = 0.4m }, new { lost.Id, Result = -2.25m, Fees = 0.35m } });
+            await connection.ExecuteAsync("UPDATE trades SET fees = 0.1, unrealised = -3 WHERE id = @Id", new { holding.Id });
+        }
+
+        (int open, int closed, decimal result, decimal fees) = await _trades.CountsAsync(CancellationToken.None);
+
+        Assert.That((open, closed, result, fees), Is.EqualTo((1, 2, 3.25m, 0.75m)));
+    }
+
     private Task<TradeBook?> Apply(Guid id, params TradeFill[] fills)
     {
         return _trades.ChangeAsync(id, null, book =>
