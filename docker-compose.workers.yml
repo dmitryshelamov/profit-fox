@@ -4,7 +4,8 @@
 # The database, the API and the scanner are on firebat-01 (docker-compose.prod.yml); these Workers reach its database on
 # the LAN with the same PROFIT_FOX_DB_PASSWORD in .env.prod (mode 600, never committed). They take runs and never the
 # scanner (Scanner:Enabled), and share one folder of the cache of history, the volume profit-fox-history-cache of this
-# machine: it outlives a deploy, and removing it only makes the next reads ask the market-data service.
+# machine: it outlives a deploy, and removing it only makes the next reads ask the market-data service. They never trade
+# (Trading:Enabled, change take-idea-trades) and get no master key: they cannot read a secret of an account.
 name: profit-fox
 
 services:
@@ -20,6 +21,7 @@ services:
       MarketData__HistoryCache__Path: /var/cache/profit-fox/history
       Worker__Name: firebat-02-1
       Scanner__Enabled: "false"
+      Trading__Enabled: "false"
     volumes:
       - history-cache:/var/cache/profit-fox/history
 
@@ -35,6 +37,7 @@ services:
       MarketData__HistoryCache__Path: /var/cache/profit-fox/history
       Worker__Name: firebat-02-2
       Scanner__Enabled: "false"
+      Trading__Enabled: "false"
     volumes:
       - history-cache:/var/cache/profit-fox/history
 
