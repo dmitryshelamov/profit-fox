@@ -1,8 +1,10 @@
 # Production of the bench on firebat-01 (192.168.8.163). deploy/deploy.sh runs it for one version, never by hand:
 #   PROFIT_FOX_VERSION=<N> docker compose -f docker-compose.prod.yml --env-file ~/profit-fox/.env.prod up -d
-# The API with the page and both Workers run the images of version N, built from a commit of release/0.1.0. The only secret
-# comes from .env.prod on the server (mode 600, never committed): PROFIT_FOX_DB_PASSWORD (hex, so it needs no escaping in the
-# connection string). Every other setting is the one of appsettings.json. The bench of firebat-01 is its own: its
+# The API with the page and both Workers run the images of version N, built from a commit of release/0.1.0. The secrets
+# come from .env.prod on the server (mode 600, never committed): PROFIT_FOX_DB_PASSWORD (hex, so it needs no escaping in the
+# connection string) and PROFIT_FOX_MASTER_KEY (openssl rand -base64 32), the master key of the secrets of the accounts of
+# Bybit, which only the API gets (change add-exchange-accounts). Without either, compose stops before it replaces a
+# container, and the running version stays. Every other setting is the one of appsettings.json. The bench of firebat-01 is its own: its
 # database, its Workers and its ledger are not shared with the Mac. The market-data service stays on soyo-02. The runs
 # go on firebat-02 (docker-compose.workers.yml). The API keeps its cache of history for the previews in the volume
 # profit-fox-history-cache: it outlives a deploy, and removing it only makes the next reads ask the market-data service.
@@ -42,6 +44,8 @@ services:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://0.0.0.0:5240
       ConnectionStrings__Bench: Host=db;Port=5432;Database=profitfox;Username=profitfox;Password=${PROFIT_FOX_DB_PASSWORD:?}
+      # The API does not start without it (README, «Аккаунты»); the Workers do not get it.
+      ExchangeAccounts__MasterKey: ${PROFIT_FOX_MASTER_KEY:?}
       MarketData__GrpcUrl: http://192.168.8.213:5237
       MarketData__RestUrl: http://192.168.8.213:5236/
       MarketData__HistoryCache__Path: /var/cache/profit-fox/history

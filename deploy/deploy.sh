@@ -9,6 +9,9 @@
 # The role of the machine lies in ~/profit-fox/role, written by hand: "main" (firebat-01: the database, the API with the
 # page and the Workers of the scanner, docker-compose.prod.yml) or "workers" (firebat-02: the Workers of the runs,
 # docker-compose.workers.yml). Without the file the machine is "main".
+# The secrets lie in ~/profit-fox/.env.prod (mode 600): PROFIT_FOX_DB_PASSWORD on both machines and, on "main" only,
+# PROFIT_FOX_MASTER_KEY, the master key of the secrets of the accounts of Bybit. The script checks that they are there
+# before anything changes, and never prints their values.
 
 # Raised when the command changes; deploy.yml passes the same number, so an outdated copy on the server refuses.
 DEPLOY_PROTOCOL=1
@@ -42,6 +45,30 @@ read_role() {
       return 1
       ;;
   esac
+}
+
+# The secrets the role needs from the env file: the password of the database, and on "main" the master key of the API.
+secrets_of() {
+  if [[ "$1" == main ]]; then
+    echo PROFIT_FOX_DB_PASSWORD PROFIT_FOX_MASTER_KEY
+  else
+    echo PROFIT_FOX_DB_PASSWORD
+  fi
+}
+
+# Every name given has a line NAME=<value> with a value in the env file; a missing one is named, its value never shown.
+require_secrets() {
+  local file="$1" name missing=()
+  shift
+  for name in "$@"; do
+    if ! grep --quiet --extended-regexp "^${name}=.+" "$file" 2>/dev/null; then
+      missing+=("$name")
+    fi
+  done
+  if ((${#missing[@]} > 0)); then
+    echo "deploy: $file has no ${missing[*]}: add it before the deploy (README, \"Разовые шаги владельца\")" >&2
+    return 1
+  fi
 }
 
 fail() {
@@ -84,6 +111,8 @@ main() {
   local version commit release image revision role file images
   version="$(parse_command "${SSH_ORIGINAL_COMMAND:-}")" || exit 1
   role="$(read_role "$ROOT/role")" || exit 1
+  # shellcheck disable=SC2046 # the names are words without spaces
+  require_secrets "$ROOT/.env.prod" $(secrets_of "$role") || exit 1
   if [[ "$role" == main ]]; then
     file=docker-compose.prod.yml
     images=(profit-fox profit-fox-bench-worker)
