@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 
 using ProfitFox.Domain.Repositories;
+using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Accounts;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Backtests;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Filters;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Ideas;
@@ -39,6 +40,7 @@ internal static class PostgresRegistrar
         services.AddSingleton<IMarketPairRepository, MarketPairRepository>();
         services.AddSingleton<ISavedFilterRepository, SavedFilterRepository>();
         services.AddSingleton<ILabelWeightRepository, LabelWeightRepository>();
+        services.AddSingleton<IExchangeAccountRepository, ExchangeAccountRepository>();
         services
             .AddFluentMigratorCore()
             .ConfigureRunner(runner => runner

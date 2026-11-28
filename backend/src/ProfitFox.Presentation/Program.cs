@@ -20,6 +20,9 @@ public class Program
 
         builder.Services.AddInfrastructure(builder.Configuration);
 
+        // The accounts of the exchange (change add-exchange-accounts): without the master key the API does not start.
+        builder.Services.RequireMasterKey();
+
         // The thresholds of «⚡ всплеск» the list of signals shows (change add-ideas-and-market): those the Worker takes.
         builder.Services.AddSingleton(builder.Configuration.GetSection("Ideas").Get<IdeasSettings>() ?? new IdeasSettings());
 

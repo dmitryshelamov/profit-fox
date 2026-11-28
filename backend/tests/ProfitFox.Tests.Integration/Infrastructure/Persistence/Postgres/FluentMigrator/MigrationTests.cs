@@ -31,7 +31,9 @@ public sealed class MigrationTests
 
     private static readonly string[] ScoreTables = ["label_weights"];
 
-    private static readonly string[] Tables = [.. BacktestTables.Concat(IdeaTables).Concat(ScoreTables).Order(StringComparer.Ordinal)];
+    private static readonly string[] AccountTables = ["exchange_accounts"];
+
+    private static readonly string[] Tables = [.. BacktestTables.Concat(IdeaTables).Concat(ScoreTables).Concat(AccountTables).Order(StringComparer.Ordinal)];
 
     [SetUp]
     public async Task Empty()
@@ -61,7 +63,7 @@ public sealed class MigrationTests
 
         await using var connection = new NpgsqlConnection(connectionString);
         long[] versions = [.. await connection.QueryAsync<long>("SELECT \"Version\" FROM \"VersionInfo\" ORDER BY \"Version\"")];
-        Assert.That(versions, Is.EqualTo(new[] { 202611200001L, 202611210001L, 202611220001L, 202611220002L, 202611230001L, 202611230002L, 202611230003L, 202611230004L, 202611250001L, 202611250002L, 202611270001L, 202611280001L, 202611280002L }));
+        Assert.That(versions, Is.EqualTo(new[] { 202611200001L, 202611210001L, 202611220001L, 202611220002L, 202611230001L, 202611230002L, 202611230003L, 202611230004L, 202611250001L, 202611250002L, 202611270001L, 202611280001L, 202611280002L, 202611280003L }));
         Assert.That(await TablesOf(connectionString), Is.SupersetOf(new[] { "strategies", "strategy_versions", "strategy_signals" }));
     }
 
@@ -386,6 +388,41 @@ public sealed class MigrationTests
         PostgresException? oldRange = Assert.ThrowsAsync<PostgresException>(() => connection.ExecuteAsync("UPDATE label_weights SET long_weight = 4 WHERE text = '↓ BTC 4h'"));
         Assert.That(oldRange!.SqlState, Is.EqualTo(PostgresErrorCodes.CheckViolation));
         Assert.That(await connection.ExecuteScalarAsync<long>("SELECT count(*) FROM pg_indexes WHERE tablename = 'ideas' AND indexname = 'ideas_state_score_ix'"), Is.EqualTo(1));
+    }
+
+    /// <summary>
+    ///     Change add-exchange-accounts, task 3.2 (design.md, decision 3, «Migration Plan»): the table of the accounts with the
+    ///     secret only in its encrypted parts and one name without regard to case and one UID; Down removes the table with the
+    ///     secrets and nothing else.
+    /// </summary>
+    [Test]
+    public async Task The_accounts_table_keeps_the_secret_encrypted_and_down_removes_it()
+    {
+        string connectionString = await BenchDatabase.NewDatabase();
+        await using var connection = new NpgsqlConnection(connectionString);
+        await using ServiceProvider services = BenchDatabase.Migrated(connectionString);
+        using IServiceScope scope = services.CreateScope();
+        IMigrationRunner runner = scope.ServiceProvider.GetRequiredService<IMigrationRunner>();
+
+        Assert.That(
+            await ColumnsOf(connection, ["exchange_accounts"]),
+            Is.EqualTo(new[]
+            {
+                "exchange_accounts.id:uuid:NO", "exchange_accounts.name:text:NO", "exchange_accounts.api_key:text:NO",
+                "exchange_accounts.secret_nonce:bytea:NO", "exchange_accounts.secret_ciphertext:bytea:NO", "exchange_accounts.secret_tag:bytea:NO",
+                "exchange_accounts.uid:bigint:NO", "exchange_accounts.created_at:timestamp with time zone:NO"
+            }));
+        Assert.That(
+            await connection.QueryAsync<string>("SELECT indexdef FROM pg_indexes WHERE tablename = 'exchange_accounts' AND indexname LIKE '%_ux' ORDER BY indexname"),
+            Is.EqualTo(new[]
+            {
+                "CREATE UNIQUE INDEX exchange_accounts_name_ux ON public.exchange_accounts USING btree (lower(name))",
+                "CREATE UNIQUE INDEX exchange_accounts_uid_ux ON public.exchange_accounts USING btree (uid)"
+            }));
+
+        runner.MigrateDown(202611280002);
+
+        Assert.That(await TablesOf(connectionString), Is.EqualTo(Tables.Except(AccountTables).ToArray()));
     }
 
     private static async Task<string[]> ColumnsOf(NpgsqlConnection connection, string[] tables)

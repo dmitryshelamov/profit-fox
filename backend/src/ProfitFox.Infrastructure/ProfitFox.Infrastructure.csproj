@@ -5,6 +5,7 @@
     </ItemGroup>
 
     <ItemGroup>
+        <PackageReference Include="Bybit.Net"/>
         <PackageReference Include="Dapper"/>
         <PackageReference Include="FluentMigrator.Runner.Postgres"/>
         <PackageReference Include="Google.Protobuf"/>
