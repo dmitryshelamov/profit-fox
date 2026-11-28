@@ -137,7 +137,7 @@ public sealed class ScoringApiTests
         Assert.That((fromTwo.Total, fromTwo.Items.Select(idea => idea.Symbol).Order().ToArray()), Is.EqualTo((2, new[] { "AUSDT", "BUSDT" })).Using<(int, string[])>((a, b) => a.Item1 == b.Item1 && a.Item2.SequenceEqual(b.Item2)));
         Assert.That(summary.Items.Single().Ideas, Is.EqualTo(1));
         Assert.That(counts.Total, Is.EqualTo(3));
-        Assert.That(scores.Rows.Select(row => (row.Score, row.Ideas)), Is.EqualTo(new[] { (2, 1), (0, 1) }));
+        Assert.That(scores.Rows.Select(row => (row.From, row.To, row.Ideas)), Is.EqualTo(new[] { (2m, 2.5m, 1), (0m, 0.5m, 1) }));
         Assert.That(await Errors(word), Is.EqualTo(new[] { ("InvalidMinScore", (string?)"minScore") }));
         Assert.That(await Errors(strategiesWord), Is.EqualTo(new[] { ("InvalidMinScore", (string?)"minScore") }));
         Assert.That(await Errors(scoresWord), Is.EqualTo(new[] { ("InvalidMinScore", (string?)"minScore") }));

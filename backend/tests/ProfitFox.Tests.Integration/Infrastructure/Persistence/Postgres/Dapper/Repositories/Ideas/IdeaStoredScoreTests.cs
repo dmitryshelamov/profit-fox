@@ -78,7 +78,7 @@ public sealed class IdeaStoredScoreTests
 
         Assert.That((await Stored(closed.Id), await Stored(open.Id), await Stored(other.Id)), Is.EqualTo((1m, -3m, 1m)));
         IReadOnlyList<IdeaScoreRow> rows = await _ideas.ScoresAsync(new IdeaListQuery(IdeaListKind.Closed, new ListOrder("exitTime", true, 1, 50)), CancellationToken.None);
-        Assert.That(rows.Select(row => (row.Score, row.Ideas)), Is.EqualTo(new[] { (1, 1) }), "the outcomes put the closed idea at its new score");
+        Assert.That(rows.Select(row => (row.From, row.Ideas)), Is.EqualTo(new[] { (1m, 1) }), "the outcomes put the closed idea at its new score");
     }
 
     [Test]

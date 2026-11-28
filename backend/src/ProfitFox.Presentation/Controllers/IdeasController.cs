@@ -97,9 +97,9 @@ public class IdeasController(ISender sender) : ControllerBase
 
     /// <summary>
     ///     The outcomes of the closed ideas by their score now (change add-idea-score, spec idea-score «Итоги по баллу»): a row
-    ///     a score with at least one idea, from the highest, with the choices, the period and the saved filter of the journal;
-    ///     excluded ideas do not count. A choice outside its list or a least score that is not a number with at most two digits
-    ///     after the point answers 422.
+    ///     a group of scores half a point wide with at least one idea, from the highest (change decimal-label-weights), with
+    ///     the choices, the period and the saved filter of the journal; excluded ideas do not count. A choice outside its list
+    ///     or a least score that is not a number with at most two digits after the point answers 422.
     /// </summary>
     /// <param name="search">A part of the symbol.</param>
     /// <param name="strategy">The name of a strategy.</param>

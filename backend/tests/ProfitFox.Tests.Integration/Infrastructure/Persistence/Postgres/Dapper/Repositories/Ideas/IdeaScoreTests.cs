@@ -178,6 +178,8 @@ public sealed class IdeaScoreTests
         Assert.That(page.Items.Select(row => row.Pair.Symbol), Is.EqualTo(new[] { "AUSDT" }));
     }
 
+    // Change decimal-label-weights, task 3.1 (design.md, decision 4): spec idea-score «Два балла» — groups of 0.5 by their
+    // bounds, from the highest.
     [Test]
     public async Task The_outcomes_by_score_count_closed_ideas_from_the_highest_score()
     {
@@ -189,7 +191,7 @@ public sealed class IdeaScoreTests
 
         IReadOnlyList<IdeaScoreRow> rows = await _ideas.ScoresAsync(Closed(), CancellationToken.None);
 
-        Assert.That(rows.Select(row => (row.Score, row.Ideas)), Is.EqualTo(new[] { (2, 2), (0, 1) }));
+        Assert.That(rows.Select(row => (row.From, row.To, row.Ideas)), Is.EqualTo(new[] { (2m, 2.5m, 2), (0m, 0.5m, 1) }));
         Assert.That(rows[0].Wins, Is.EqualTo(0.5).Within(1e-9));
         Assert.That(rows[0].Mean, Is.EqualTo(0.002).Within(1e-9));
         Assert.That(rows[0].Sum, Is.EqualTo(0.4).Within(1e-9));
@@ -211,8 +213,29 @@ public sealed class IdeaScoreTests
         IReadOnlyList<IdeaScoreRow> all = await _ideas.ScoresAsync(Closed(), CancellationToken.None);
         IReadOnlyList<IdeaScoreRow> shorts = await _ideas.ScoresAsync(Closed() with { Side = "short" }, CancellationToken.None);
 
-        Assert.That(all.Select(row => (row.Score, row.Ideas)), Is.EqualTo(new[] { (1, 2) }));
-        Assert.That(shorts.Select(row => (row.Score, row.Ideas, row.Mean)), Is.EqualTo(new[] { (1, 1, 0.002) }));
+        Assert.That(all.Select(row => (row.From, row.To, row.Ideas)), Is.EqualTo(new[] { (1m, 1.5m, 2) }));
+        Assert.That(shorts.Select(row => (row.From, row.Ideas, row.Mean)), Is.EqualTo(new[] { (1m, 1, 0.002) }));
+    }
+
+    // Change decimal-label-weights, task 3.1: spec idea-score «Дробные баллы в одной группе», «Отрицательный дробный балл» —
+    // a group takes the scores from its lower bound up to, not including, its upper one.
+    [Test]
+    public async Task The_outcomes_by_score_put_scores_with_hundredths_in_groups_of_a_half()
+    {
+        await _weights.SetAsync(new LabelWeight("плюс 0.5", 0.5m, 0), CancellationToken.None);
+        await _weights.SetAsync(new LabelWeight("плюс 0.86", 0.86m, 0), CancellationToken.None);
+        await _weights.SetAsync(new LabelWeight("плюс 1", 1, 0), CancellationToken.None);
+        await _weights.SetAsync(new LabelWeight("минус 0.25", -0.25m, 0), CancellationToken.None);
+        await _weights.SetAsync(new LabelWeight("минус 0.5", -0.5m, 0), CancellationToken.None);
+        await Close(await Add(EntrySide.Long, ["плюс 0.5"], "AUSDT"), 0.001);
+        await Close(await Add(EntrySide.Long, ["плюс 0.86"], "BUSDT"), 0.001);
+        await Close(await Add(EntrySide.Long, ["плюс 1"], "CUSDT"), 0.001);
+        await Close(await Add(EntrySide.Long, ["минус 0.25"], "DUSDT"), 0.001);
+        await Close(await Add(EntrySide.Long, ["минус 0.5"], "EUSDT"), 0.001);
+
+        IReadOnlyList<IdeaScoreRow> rows = await _ideas.ScoresAsync(Closed(), CancellationToken.None);
+
+        Assert.That(rows.Select(row => (row.From, row.To, row.Ideas)), Is.EqualTo(new[] { (1m, 1.5m, 1), (0.5m, 1m, 2), (-0.5m, 0m, 2) }));
     }
 
     [Test]
@@ -220,11 +243,11 @@ public sealed class IdeaScoreTests
     {
         await Weights(("плюс 1", 1));
         await Close(await Add(EntrySide.Long, ["плюс 1"], "AUSDT"), 0.001);
-        Assert.That((await _ideas.ScoresAsync(Closed(), CancellationToken.None)).Single().Score, Is.EqualTo(1));
+        Assert.That((await _ideas.ScoresAsync(Closed(), CancellationToken.None)).Single().From, Is.EqualTo(1m));
 
         await _weights.SetAsync(new LabelWeight("плюс 1", 3, 0), CancellationToken.None);
 
-        Assert.That((await _ideas.ScoresAsync(Closed(), CancellationToken.None)).Single().Score, Is.EqualTo(3));
+        Assert.That((await _ideas.ScoresAsync(Closed(), CancellationToken.None)).Single().From, Is.EqualTo(3m));
     }
 
     private static IdeaListQuery Closed()

@@ -38,13 +38,13 @@ typecheck`, `npm run lint`, `npm run format:check`, `npm run build`. Кажда�
 
 ## 3. Итоги группами
 
-- [ ] 3.1 `IdeaRepository.ScoresAsync` (решение 4): группа `floor(i.score * 2) / 2`; строка несёт `from`, `to`, идёт
+- [x] 3.1 `IdeaRepository.ScoresAsync` (решение 4): группа `floor(i.score * 2) / 2`; строка несёт `from`, `to`, идёт
   по `from` по убыванию. `IdeaScoreRow`, `IdeaScoreResponse`: `From`, `To` вместо `Score`. Сценарии «Два балла»,
   «Дробные баллы в одной группе», «Отрицательный дробный балл», «Исключённая идея».
 
 ## 4. Фронтенд
 
-- [ ] 4.1 `npm run generate:api` при запущенном API; `schema.d.ts` в коммите.
+- [x] 4.1 `npm run generate:api` при запущенном API; `schema.d.ts` в коммите.
 - [ ] 4.2 `scoreText` (решение 5): число со знаком без лишних нулей (`+1.25`, `−0.5`, `0`, `+2`); тест.
 - [ ] 4.3 «Скоринг», веса (решение 5): поле числа `step 0.01` вместо `WeightChoice`; сохранение по Enter и по уходу из
   поля, только если число поменялось; отказ — ошибка в строке и прежний вес. `weights` из `api/scoring.ts` убрать.
