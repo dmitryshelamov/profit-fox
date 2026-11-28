@@ -111,8 +111,21 @@ public sealed class AddAccountCommandHandlerTests
         Assert.That(refused!.Problems, Is.EqualTo(new[] { new AccountProblem("TakenName", "аккаунт «основной» уже есть", "name") }));
     }
 
-    private Task<ExchangeAccount> Handle(AddAccountCommand command)
+    // The database keeps a moment to the microsecond, and a clock of Linux ticks every 100 ns: the account is answered with
+    // the moment it is read back with, not with seven digits the table drops.
+    [Test]
+    public async Task The_moment_of_an_account_is_cut_to_the_microsecond_the_database_keeps()
     {
-        return new AddAccountCommandHandler(_accounts, _bybit, _protector, new FakeTimeProvider(Now)).Handle(command, CancellationToken.None);
+        DateTimeOffset precise = Now.AddTicks(1_234_567);
+
+        ExchangeAccount account = await Handle(new AddAccountCommand("Основной", "key-1", "secret"), precise);
+
+        Assert.That(account.CreatedAt, Is.EqualTo(Now.AddTicks(1_234_560)));
+        Assert.That((await _accounts.AllAsync(CancellationToken.None)).Single().CreatedAt, Is.EqualTo(account.CreatedAt));
+    }
+
+    private Task<ExchangeAccount> Handle(AddAccountCommand command, DateTimeOffset? now = null)
+    {
+        return new AddAccountCommandHandler(_accounts, _bybit, _protector, new FakeTimeProvider(now ?? Now)).Handle(command, CancellationToken.None);
     }
 }

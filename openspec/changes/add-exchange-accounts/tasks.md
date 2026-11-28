@@ -181,6 +181,14 @@ typecheck`, `npm run lint`, `npm run format:check`, `npm run build`. Кажда�
 - После проверки API и Vite остановлены, временная база `bench_accounts` удалена; одноразовый мастер-ключ пропал вместе
   с процессом. Временные конфигурации `accounts-api` и `accounts-frontend` убраны из `.claude/launch.json`.
 
+**Найдено в CI PR #48 (2026-11-28)**
+
+- «Backend» упал на двух тестах `AccountsControllerTests`: ответ `POST` нёс момент создания с точностью часов Linux
+  (100 нс), а список читал его из базы с точностью до микросекунды. На macOS часы дают микросекунды, поэтому локально
+  тесты проходили. Исправлено в `AddAccountCommandHandler`: момент аккаунта обрезается до микросекунды, и ответ на
+  добавление равен тому, что потом читается. Тест — `The_moment_of_an_account_is_cut_to_the_microsecond_the_database_keeps`;
+  после правки Unit — 967, Integration — 552.
+
 **Расхождения и решения при применении**
 
 - 1.2: взят `Bybit.Net` 7.9.0. Клиенту пакета не дан журнал (`NullLoggerFactory`): его записи могли бы нести запрос, а

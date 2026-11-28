@@ -43,7 +43,9 @@ internal sealed class AddAccountCommandHandler(
             throw new AccountRequestException([refused]);
         }
 
-        var account = new ExchangeAccount(Guid.NewGuid(), name, key.Uid, apiKey, time.GetUtcNow());
+        // The database keeps a moment to the microsecond: the account is answered with the moment it is read back with.
+        DateTimeOffset now = time.GetUtcNow();
+        var account = new ExchangeAccount(Guid.NewGuid(), name, key.Uid, apiKey, now.AddTicks(-(now.Ticks % TimeSpan.TicksPerMicrosecond)));
         ProtectedSecret protectedSecret = protector.Protect(account.Id, secret);
         if (await accounts.AddAsync(account, protectedSecret, cancellationToken))
         {
