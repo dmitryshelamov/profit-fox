@@ -310,7 +310,11 @@ describe('the strategy and the labels in the tables of «Идеи»', () => {
       expect(labels.getByText('⚡ всплеск')).toBeInTheDocument();
       expect(labels.queryByText('↓ BTC')).toBeNull();
       expect(labels.getByText('+3')).toBeInTheDocument();
-      expect(labels.getByTitle('⚡ всплеск, ↓ BTC, ↓ пара, фандинг')).toBeInTheDocument();
+      await userEvent.hover(labels.getByText('+3').parentElement!);
+      const hint = await screen.findByRole('tooltip');
+      for (const label of ['⚡ всплеск', '↓ BTC', '↓ пара', 'фандинг']) {
+        expect(within(hint).getByText(label)).toBeInTheDocument();
+      }
     });
   }
 });
