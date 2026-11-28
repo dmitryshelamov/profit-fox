@@ -142,11 +142,10 @@ else
   failures=$((failures + 1))
 fi
 
-# The commit is in the branch when the branch is the commit itself or comes after it. GitHub answers for the branch as the base;
-# the slash of its name is escaped.
+# The commit is in the branch when the branch is the commit itself or comes after it. GitHub answers for the branch as the base.
 compare_status=""
 github() {
-  [[ "$1" == "compare/release%2F0.1.0...$commit" ]] && echo "{\"status\": \"$compare_status\"}"
+  [[ "$1" == "compare/main...$commit" ]] && echo "{\"status\": \"$compare_status\"}"
 }
 commit=0123456789abcdef0123456789abcdef01234567
 

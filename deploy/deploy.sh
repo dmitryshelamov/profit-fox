@@ -3,7 +3,7 @@
 # of profit-fox-market-data for the two images of this service (the API with the page, and the Worker).
 # The deploy key in ~/.ssh/authorized_keys runs only this script (a forced command), so the request comes in
 # SSH_ORIGINAL_COMMAND as "deploy <N> <protocol>". The script trusts nothing else the caller sends: it takes the commit
-# of tag vN from GitHub, accepts it only from release/0.1.0 and runs only images built from that commit.
+# of tag vN from GitHub, accepts it only from main and runs only images built from that commit.
 # Installed by hand as ~/profit-fox/deploy.sh (README, "Production (firebat-01)"); it needs curl, jq and docker.
 # It never runs `docker compose down -v`: the volume of the database is the only store of the bench.
 # The role of the machine lies in ~/profit-fox/role, written by hand: "main" (firebat-01: the database, the API with the
@@ -16,7 +16,7 @@
 # Raised when the command changes; deploy.yml passes the same number, so an outdated copy on the server refuses.
 DEPLOY_PROTOCOL=1
 REPOSITORY=dmitryshelamov/profit-fox
-BRANCH=release/0.1.0
+BRANCH=main
 ROOT="$HOME/profit-fox"
 
 parse_command() {

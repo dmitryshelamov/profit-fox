@@ -1,6 +1,6 @@
 # Production of the bench on firebat-01 (192.168.8.163). deploy/deploy.sh runs it for one version, never by hand:
 #   PROFIT_FOX_VERSION=<N> docker compose -f docker-compose.prod.yml --env-file ~/profit-fox/.env.prod up -d
-# The API with the page and both Workers run the images of version N, built from a commit of release/0.1.0. The secrets
+# The API with the page and both Workers run the images of version N, built from a commit of main. The secrets
 # come from .env.prod on the server (mode 600, never committed): PROFIT_FOX_DB_PASSWORD (hex, so it needs no escaping in the
 # connection string) and PROFIT_FOX_MASTER_KEY (openssl rand -base64 32), the master key of the secrets of the accounts of
 # Bybit, which the API and the two Workers of this machine get (changes add-exchange-accounts and take-idea-trades): one of
