@@ -10,6 +10,7 @@ import {
   scoreText,
   scoreTone,
   type ScoringLabel,
+  scoringLabelsKey,
   setLabelWeight,
   weights,
 } from '@/api/scoring';
@@ -26,7 +27,7 @@ import { Table, Td, Th, Tr } from '@/shared/ui/Table';
 /** A score with fewer closed ideas than this is a small sample (spec idea-score «Итоги по баллу на странице «Скоринг»»). */
 export const smallSample = 30;
 
-const labelsKey = ['scoring', 'labels'] as const;
+const labelsKey = scoringLabelsKey;
 const scoresKey = ['scoring', 'scores'] as const;
 
 /**

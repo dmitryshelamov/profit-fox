@@ -4,6 +4,9 @@ import { type Written, written } from './signals';
 /** A row of the labels of «Скоринг» with its weights (change add-idea-score, spec idea-score «Раздел «Скоринг»»). */
 export type ScoringLabel = Schemas['ScoringLabelResponse'];
 
+/** The key of the labels with their weights, one for «Скоринг» and the hints of the labels of ideas. */
+export const scoringLabelsKey = ['scoring', 'labels'] as const;
+
 /** The labels of signals with their weights, those that are on first, and the built-in «⚡ всплеск» last. */
 export async function listScoringLabels(): Promise<ScoringLabel[]> {
   return unwrap(await api.GET('/api/scoring/labels'));
